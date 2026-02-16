@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}CS2 Predictor - Teams{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Teams</h1>
+    <div class="header-actions">
+        <input type="text" id="team-filter" class="input" placeholder="Filter teams...">
+    </div>
+</div>
+
+<section class="card">
+    <div class="teams-table-wrap">
+        <table class="table" id="teams-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Team</th>
+                    <th>World Ranking</th>
+                    <th>Elo Rating</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div id="no-teams" class="empty-state hidden">
+        <p>No teams loaded. Click "Update" to fetch data from HLTV.</p>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allTeams = [];
+
+document.addEventListener("DOMContentLoaded", () => {
+    loadTeams();
+    document.getElementById("team-filter").addEventListener("input", filterTeams);
+});
+
+async function loadTeams() {
+    try {
+        allTeams = await apiGet("/api/teams");
+        renderTeams(allTeams);
+    } catch (e) {
+        console.error("Failed to load teams", e);
+    }
+}
+
+function renderTeams(teams) {
+    const tbody = document.querySelector("#teams-table tbody");
+    tbody.innerHTML = "";
+    if (!teams.length) {
+        document.getElementById("no-teams").classList.remove("hidden");
+        return;
+    }
+    document.getElementById("no-teams").classList.add("hidden");
+    teams.forEach((t, i) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${i + 1}</td>
+            <td><strong>${t.name}</strong></td>
+            <td>${t.world_ranking || "-"}</td>
+            <td>${t.elo_rating ? t.elo_rating.toFixed(0) : "1500"}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function filterTeams() {
+    const q = document.getElementById("team-filter").value.toLowerCase();
+    const filtered = allTeams.filter(t => t.name.toLowerCase().includes(q));
+    renderTeams(filtered);
+}
+</script>
+{% endblock %}

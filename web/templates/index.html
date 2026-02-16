@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}CS2 Predictor - Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <!-- Stats Cards -->
+    <section class="stats-cards">
+        <div class="card stat-card">
+            <div class="stat-value" id="stat-matches">-</div>
+            <div class="stat-label">Total Matches</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value" id="stat-teams">-</div>
+            <div class="stat-label">Teams Tracked</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value" id="stat-predictions">-</div>
+            <div class="stat-label">Predictions Made</div>
+        </div>
+        <div class="card stat-card accent">
+            <div class="stat-value" id="stat-accuracy">-</div>
+            <div class="stat-label">Model Accuracy</div>
+        </div>
+    </section>
+
+    <!-- Quick Predict -->
+    <section class="card">
+        <h2 class="card-title">Quick Prediction</h2>
+        <div class="predict-form">
+            <div class="predict-teams">
+                <div class="team-select">
+                    <label>Team 1</label>
+                    <input type="text" id="team1-search" class="input" placeholder="Search team..." autocomplete="off">
+                    <div id="team1-dropdown" class="dropdown"></div>
+                    <input type="hidden" id="team1-id">
+                    <div class="selected-team" id="team1-selected"></div>
+                </div>
+                <div class="vs-badge">VS</div>
+                <div class="team-select">
+                    <label>Team 2</label>
+                    <input type="text" id="team2-search" class="input" placeholder="Search team..." autocomplete="off">
+                    <div id="team2-dropdown" class="dropdown"></div>
+                    <input type="hidden" id="team2-id">
+                    <div class="selected-team" id="team2-selected"></div>
+                </div>
+            </div>
+            <div class="predict-options">
+                <div class="option-group">
+                    <label>Map</label>
+                    <select id="map-select" class="input">
+                        <option value="">Any Map</option>
+                        <option value="Mirage">Mirage</option>
+                        <option value="Inferno">Inferno</option>
+                        <option value="Nuke">Nuke</option>
+                        <option value="Overpass">Overpass</option>
+                        <option value="Ancient">Ancient</option>
+                        <option value="Anubis">Anubis</option>
+                        <option value="Dust2">Dust2</option>
+                        <option value="Vertigo">Vertigo</option>
+                        <option value="Train">Train</option>
+                    </select>
+                </div>
+                <div class="option-group">
+                    <label>
+                        <input type="checkbox" id="is-lan"> LAN Event
+                    </label>
+                </div>
+                <button id="btn-predict" class="btn btn-primary btn-lg">Predict</button>
+            </div>
+        </div>
+
+        <!-- Prediction Result -->
+        <div id="prediction-result" class="prediction-result hidden">
+            <div class="result-header">
+                <h3>Prediction Result</h3>
+                <span class="confidence-badge" id="result-confidence"></span>
+            </div>
+            <div class="result-matchup">
+                <div class="result-team" id="result-team1">
+                    <div class="team-name"></div>
+                    <div class="win-prob"></div>
+                    <div class="prob-bar"><div class="prob-fill"></div></div>
+                </div>
+                <div class="result-vs">VS</div>
+                <div class="result-team" id="result-team2">
+                    <div class="team-name"></div>
+                    <div class="win-prob"></div>
+                    <div class="prob-bar"><div class="prob-fill"></div></div>
+                </div>
+            </div>
+            <div class="result-winner" id="result-winner"></div>
+            <div class="result-method" id="result-method"></div>
+            <div class="result-analysis" id="result-analysis">
+                <h4>Analysis</h4>
+                <ul id="analysis-points"></ul>
+            </div>
+            <div class="result-features" id="result-features">
+                <h4>Feature Breakdown</h4>
+                <div class="features-grid" id="features-grid"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Top Teams -->
+    <section class="card">
+        <h2 class="card-title">Top Teams by Elo Rating</h2>
+        <div class="top-teams-list" id="top-teams"></div>
+    </section>
+
+    <!-- Recent Matches -->
+    <section class="card">
+        <h2 class="card-title">Recent Matches</h2>
+        <div class="matches-table-wrap">
+            <table class="table" id="recent-matches">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Team 1</th>
+                        <th>Score</th>
+                        <th>Team 2</th>
+                        <th>Event</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

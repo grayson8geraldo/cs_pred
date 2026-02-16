@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}CS2 Predictor - Predictions{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Prediction History</h1>
+    <div class="header-actions">
+        <button id="btn-train" class="btn btn-primary">Train Model</button>
+    </div>
+</div>
+
+<section class="card">
+    <div class="predictions-table-wrap">
+        <table class="table" id="predictions-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Team 1</th>
+                    <th>T1 Prob</th>
+                    <th>Team 2</th>
+                    <th>T2 Prob</th>
+                    <th>Predicted Winner</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div id="no-predictions" class="empty-state hidden">
+        <p>No predictions yet. Use the Dashboard to make your first prediction.</p>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    loadPredictions();
+    document.getElementById("btn-train").addEventListener("click", trainModel);
+});
+
+async function loadPredictions() {
+    try {
+        const data = await apiGet("/api/predictions/history?limit=100");
+        const tbody = document.querySelector("#predictions-table tbody");
+        tbody.innerHTML = "";
+        if (!data.length) {
+            document.getElementById("no-predictions").classList.remove("hidden");
+            return;
+        }
+        data.forEach(p => {
+            const row = document.createElement("tr");
+            const date = p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU") : "-";
+            const conf = (p.confidence * 100).toFixed(1);
+            const confClass = p.confidence > 0.3 ? "high" : p.confidence > 0.15 ? "medium" : "low";
+            row.innerHTML = `
+                <td>${date}</td>
+                <td class="${p.team1_win_prob > p.team2_win_prob ? 'winner' : ''}">${p.team1_name}</td>
+                <td>${(p.team1_win_prob * 100).toFixed(1)}%</td>
+                <td class="${p.team2_win_prob > p.team1_win_prob ? 'winner' : ''}">${p.team2_name}</td>
+                <td>${(p.team2_win_prob * 100).toFixed(1)}%</td>
+                <td><strong>${p.predicted_winner}</strong></td>
+                <td><span class="badge badge-${confClass}">${conf}%</span></td>
+            `;
+            tbody.appendChild(row);
+        });
+    } catch (e) {
+        console.error("Failed to load predictions", e);
+    }
+}
+
+async function trainModel() {
+    const btn = document.getElementById("btn-train");
+    btn.disabled = true;
+    btn.textContent = "Training...";
+    try {
+        const res = await apiPost("/api/model/train");
+        if (res.cv_accuracy) {
+            showToast(`Model trained! CV Accuracy: ${(res.cv_accuracy * 100).toFixed(1)}%`, "success");
+        } else {
+            showToast(res.message || "Not enough data to train", "warning");
+        }
+    } catch (e) {
+        showToast("Training failed: " + e.message, "error");
+    }
+    btn.disabled = false;
+    btn.textContent = "Train Model";
+}
+</script>
+{% endblock %}

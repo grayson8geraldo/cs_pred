@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}CS2 Predictor - Statistics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Statistics & Model Info</h1>
+</div>
+
+<div class="stats-grid">
+    <section class="card">
+        <h2 class="card-title">Prediction Strategy</h2>
+        <div class="strategy-info">
+            <h3>Features Used</h3>
+            <ul class="feature-list">
+                <li><strong>Elo Rating Differential</strong> - Custom Elo rating tracking team strength over time</li>
+                <li><strong>Glicko-2 Rating Differential</strong> - Advanced rating with uncertainty tracking</li>
+                <li><strong>Glicko-2 RD Differential</strong> - Rating deviation (how certain we are about the rating)</li>
+                <li><strong>World Ranking Differential</strong> - HLTV official ranking gap</li>
+                <li><strong>Win Rate (3 months)</strong> - Recent overall win rate differential</li>
+                <li><strong>Recent Form</strong> - Performance in last 10 matches</li>
+                <li><strong>Head-to-Head</strong> - Historical matchup advantage</li>
+                <li><strong>Map Win Rate</strong> - Map-specific performance differential</li>
+                <li><strong>Average Rounds</strong> - Round scoring differential</li>
+                <li><strong>LAN Factor</strong> - LAN vs online context</li>
+                <li><strong>Experience</strong> - Matches played differential</li>
+                <li><strong>Win Streak</strong> - Current streak momentum</li>
+            </ul>
+
+            <h3>Model</h3>
+            <p>XGBoost Gradient Boosted Trees with hyperparameter tuning.
+               Fallback: weighted heuristic using sigmoid-transformed feature combination.</p>
+
+            <h3>Data Sources</h3>
+            <ul>
+                <li>HLTV.org (match results, rankings, team stats)</li>
+                <li>Custom Elo & Glicko-2 rating systems computed from match history</li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2 class="card-title">Model Performance</h2>
+        <div id="model-stats">
+            <div class="model-stat-row">
+                <span class="label">Total matches in DB:</span>
+                <span class="value" id="ms-matches">-</span>
+            </div>
+            <div class="model-stat-row">
+                <span class="label">Teams tracked:</span>
+                <span class="value" id="ms-teams">-</span>
+            </div>
+            <div class="model-stat-row">
+                <span class="label">Predictions made:</span>
+                <span class="value" id="ms-predictions">-</span>
+            </div>
+            <div class="model-stat-row">
+                <span class="label">Verified predictions:</span>
+                <span class="value" id="ms-verified">-</span>
+            </div>
+            <div class="model-stat-row">
+                <span class="label">Correct predictions:</span>
+                <span class="value" id="ms-correct">-</span>
+            </div>
+            <div class="model-stat-row highlight">
+                <span class="label">Accuracy:</span>
+                <span class="value" id="ms-accuracy">-</span>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", loadStats);
+
+async function loadStats() {
+    try {
+        const data = await apiGet("/api/stats/overview");
+        document.getElementById("ms-matches").textContent = data.total_matches;
+        document.getElementById("ms-teams").textContent = data.total_teams;
+        document.getElementById("ms-predictions").textContent = data.total_predictions;
+        document.getElementById("ms-verified").textContent = data.verified_predictions;
+        document.getElementById("ms-correct").textContent = data.correct_predictions;
+        document.getElementById("ms-accuracy").textContent =
+            data.accuracy ? data.accuracy.toFixed(1) + "%" : "N/A (no verified predictions)";
+    } catch (e) {
+        console.error("Failed to load stats", e);
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,10 @@
+flask==3.1.0
+gunicorn==23.0.0
+requests==2.32.3
+numpy==2.2.3
+pandas==2.2.3
+scikit-learn==1.6.1
+xgboost==2.1.4
+joblib==1.4.2
+apscheduler==3.11.0
+python-dateutil==2.9.0
