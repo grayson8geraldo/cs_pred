@@ -61,9 +61,34 @@
                     </select>
                 </div>
                 <div class="option-group">
+                    <label>Format</label>
+                    <select id="best-of" class="input">
+                        <option value="1">BO1</option>
+                        <option value="3" selected>BO3</option>
+                        <option value="5">BO5</option>
+                    </select>
+                </div>
+                <div class="option-group">
                     <label>
-                        <input type="checkbox" id="is-lan"> LAN Event
+                        <input type="checkbox" id="is-lan"> LAN
                     </label>
+                    <label>
+                        <input type="checkbox" id="is-playoff"> Playoff
+                    </label>
+                </div>
+            </div>
+            <div class="predict-options">
+                <div class="option-group">
+                    <label>Event Name</label>
+                    <input type="text" id="event-name" class="input" placeholder="e.g. IEM Katowice">
+                </div>
+                <div class="option-group">
+                    <label>Odds Team 1 (optional)</label>
+                    <input type="number" step="0.01" id="odds-t1" class="input" placeholder="e.g. 1.85">
+                </div>
+                <div class="option-group">
+                    <label>Odds Team 2 (optional)</label>
+                    <input type="number" step="0.01" id="odds-t2" class="input" placeholder="e.g. 2.10">
                 </div>
                 <button id="btn-predict" class="btn btn-primary btn-lg">Predict</button>
             </div>
@@ -94,8 +119,18 @@
                 <h4>Analysis</h4>
                 <ul id="analysis-points"></ul>
             </div>
+            <!-- Model Agreement (ensemble only) -->
+            <div class="result-models hidden" id="result-models">
+                <h4>Model Agreement</h4>
+                <div class="models-grid" id="models-grid"></div>
+            </div>
+            <!-- Value Bet -->
+            <div class="result-value-bet hidden" id="result-value-bet">
+                <h4>Value Bet Analysis</h4>
+                <div id="value-bet-content"></div>
+            </div>
             <div class="result-features" id="result-features">
-                <h4>Feature Breakdown</h4>
+                <h4>Feature Breakdown (32 features)</h4>
                 <div class="features-grid" id="features-grid"></div>
             </div>
         </div>

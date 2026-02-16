@@ -47,11 +47,16 @@ def cmd_train():
     result = predictor.train()
     if result:
         logger.info("Training complete!")
-        logger.info("CV Accuracy: %.1f%% (+/- %.1f%%)", result["cv_accuracy"] * 100, result["cv_std"] * 100)
-        logger.info("Samples: %d", result["n_samples"])
-        logger.info("Feature importance:")
-        for feat, imp in sorted(result["feature_importance"].items(), key=lambda x: -x[1]):
-            logger.info("  %-25s %.4f", feat, imp)
+        logger.info("Temporal CV Accuracy: %.1f%%", result["temporal_cv_accuracy"] * 100)
+        logger.info("Temporal CV Brier Score: %.4f", result["temporal_cv_brier"])
+        logger.info("Samples: %d | Features: %d", result["n_samples"], result["n_features"])
+        logger.info("Fold details:")
+        for fold in result["fold_results"]:
+            logger.info("  Fold %d: acc=%.1f%% brier=%.4f (n=%d)",
+                        fold["fold"], fold["accuracy"] * 100, fold["brier"], fold["test_size"])
+        logger.info("Feature importance (top 15):")
+        for feat, imp in sorted(result["feature_importance"].items(), key=lambda x: -x[1])[:15]:
+            logger.info("  %-30s %.4f", feat, imp)
     else:
         logger.warning("Training failed — not enough data.")
 

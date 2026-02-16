@@ -561,6 +561,26 @@ td.winner { color: var(--accent); font-weight: 600; }
     to { transform: translateX(0); opacity: 1; }
 }
 
+/* ─── Value Bet ─── */
+.result-value-bet.hidden, .result-models.hidden { display: none; }
+
+.result-value-bet { margin-bottom: 24px; }
+.result-value-bet h4, .result-models h4 {
+    font-size: 14px; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase;
+}
+.result-models { margin-bottom: 24px; }
+.models-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+
+.value-bet-rec {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    font-weight: 600;
+}
+.value-bet-rec.strong { background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid var(--green); }
+.value-bet-rec.moderate { background: rgba(245, 158, 11, 0.15); color: var(--accent); border: 1px solid var(--accent); }
+
 /* ─── Footer ─── */
 .footer {
     text-align: center;

@@ -18,9 +18,14 @@ GLICKO2_DEFAULT_RATING = 1500
 GLICKO2_DEFAULT_RD = 350
 GLICKO2_DEFAULT_VOL = 0.06
 
+# Time-decay Elo: K-factor increases for recent matches
+ELO_K_FACTOR_RECENT = 40   # last 30 days
+ELO_K_FACTOR_OLD = 20      # older than 90 days
+
 # Prediction model
-MODEL_PATH = os.path.join(MODELS_DIR, "xgboost_model.json")
+MODEL_PATH = os.path.join(MODELS_DIR, "ensemble_model.pkl")
 FEATURE_COLUMNS_PATH = os.path.join(MODELS_DIR, "feature_columns.json")
+CALIBRATOR_PATH = os.path.join(MODELS_DIR, "calibrator.pkl")
 
 # Data refresh interval (seconds)
 DATA_REFRESH_INTERVAL = 3600  # 1 hour
@@ -30,6 +35,21 @@ CS2_MAPS = [
     "Mirage", "Inferno", "Nuke", "Overpass",
     "Ancient", "Anubis", "Dust2", "Vertigo", "Train"
 ]
+
+# Event tiers — higher = more prestigious
+EVENT_TIERS = {
+    "major": 5,
+    "pgl": 5,
+    "blast premier": 4,
+    "iem": 4,
+    "esl pro league": 4,
+    "thunderpick": 3,
+    "betboom": 3,
+    "cct": 2,
+    "esl challenger": 2,
+    "skyesports": 2,
+    "default": 1,
+}
 
 # Flask
 FLASK_HOST = "0.0.0.0"

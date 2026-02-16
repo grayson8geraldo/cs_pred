@@ -26,6 +26,8 @@ def init_db():
         country TEXT,
         world_ranking INTEGER,
         logo_url TEXT,
+        roster_age_days INTEGER DEFAULT 90,
+        roster_changes_6m INTEGER DEFAULT 0,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -36,7 +38,15 @@ def init_db():
         team_id INTEGER,
         hltv_id INTEGER,
         country TEXT,
-        rating REAL DEFAULT 1.0,
+        rating_2_1 REAL DEFAULT 1.0,
+        adr REAL DEFAULT 70.0,
+        kast REAL DEFAULT 0.65,
+        kd_ratio REAL DEFAULT 1.0,
+        headshot_pct REAL DEFAULT 0.45,
+        opening_kill_ratio REAL DEFAULT 1.0,
+        clutch_win_pct REAL DEFAULT 0.0,
+        is_awper INTEGER DEFAULT 0,
+        joined_date TIMESTAMP,
         FOREIGN KEY (team_id) REFERENCES teams(id)
     );
 
@@ -51,9 +61,20 @@ def init_db():
         best_of INTEGER DEFAULT 1,
         event_name TEXT,
         event_id INTEGER,
+        event_tier INTEGER DEFAULT 1,
         is_lan INTEGER DEFAULT 0,
+        is_playoff INTEGER DEFAULT 0,
         match_date TIMESTAMP,
         map_name TEXT,
+        team1_ct_rounds INTEGER,
+        team1_t_rounds INTEGER,
+        team2_ct_rounds INTEGER,
+        team2_t_rounds INTEGER,
+        team1_pistol_wins INTEGER DEFAULT 0,
+        team2_pistol_wins INTEGER DEFAULT 0,
+        team1_first_kills INTEGER DEFAULT 0,
+        team2_first_kills INTEGER DEFAULT 0,
+        overtime INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (team1_id) REFERENCES teams(id),
         FOREIGN KEY (team2_id) REFERENCES teams(id)
@@ -78,10 +99,10 @@ def init_db():
     CREATE TABLE IF NOT EXISTS team_ratings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         team_id INTEGER NOT NULL,
-        rating_type TEXT NOT NULL,  -- 'elo', 'glicko2'
+        rating_type TEXT NOT NULL,
         rating REAL NOT NULL,
-        rd REAL,  -- rating deviation (Glicko2)
-        volatility REAL,  -- volatility (Glicko2)
+        rd REAL,
+        volatility REAL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (team_id) REFERENCES teams(id),
         UNIQUE(team_id, rating_type)
@@ -94,6 +115,10 @@ def init_db():
         rating REAL NOT NULL DEFAULT 1500,
         matches_played INTEGER DEFAULT 0,
         wins INTEGER DEFAULT 0,
+        ct_wr REAL DEFAULT 0.5,
+        t_wr REAL DEFAULT 0.5,
+        avg_rounds_won REAL DEFAULT 8.0,
+        pistol_wr REAL DEFAULT 0.5,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (team_id) REFERENCES teams(id),
         UNIQUE(team_id, map_name)
@@ -109,7 +134,14 @@ def init_db():
         predicted_winner_id INTEGER,
         actual_winner_id INTEGER,
         confidence REAL,
+        confidence_label TEXT,
+        method TEXT,
         features_json TEXT,
+        analysis_json TEXT,
+        bookmaker_odds_team1 REAL,
+        bookmaker_odds_team2 REAL,
+        is_value_bet INTEGER DEFAULT 0,
+        value_edge REAL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (team1_id) REFERENCES teams(id),
         FOREIGN KEY (team2_id) REFERENCES teams(id)
@@ -117,8 +149,11 @@ def init_db():
 
     CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
     CREATE INDEX IF NOT EXISTS idx_matches_teams ON matches(team1_id, team2_id);
+    CREATE INDEX IF NOT EXISTS idx_matches_winner ON matches(winner_id);
     CREATE INDEX IF NOT EXISTS idx_map_stats_team ON map_stats(team_id, map_name);
     CREATE INDEX IF NOT EXISTS idx_team_ratings_team ON team_ratings(team_id);
+    CREATE INDEX IF NOT EXISTS idx_predictions_date ON predictions(created_at);
+    CREATE INDEX IF NOT EXISTS idx_players_team ON players(team_id);
     """)
 
     conn.commit()

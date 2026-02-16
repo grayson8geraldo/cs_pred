@@ -189,6 +189,11 @@ async function makePrediction() {
 
     const mapName = document.getElementById("map-select").value || null;
     const isLan = document.getElementById("is-lan").checked;
+    const isPlayoff = document.getElementById("is-playoff").checked;
+    const bestOf = parseInt(document.getElementById("best-of").value) || 1;
+    const eventName = document.getElementById("event-name").value || "";
+    const oddsT1 = parseFloat(document.getElementById("odds-t1").value) || null;
+    const oddsT2 = parseFloat(document.getElementById("odds-t2").value) || null;
 
     const btn = document.getElementById("btn-predict");
     btn.disabled = true;
@@ -200,6 +205,11 @@ async function makePrediction() {
             team2_id: parseInt(team2Id),
             map_name: mapName,
             is_lan: isLan,
+            is_playoff: isPlayoff,
+            best_of: bestOf,
+            event_name: eventName,
+            bookmaker_odds_team1: oddsT1,
+            bookmaker_odds_team2: oddsT2,
         });
 
         displayPrediction(result);
@@ -247,6 +257,44 @@ function displayPrediction(result) {
     // Analysis
     const points = document.getElementById("analysis-points");
     points.innerHTML = result.analysis.map(p => `<li>${p}</li>`).join("");
+
+    // Model agreement (ensemble only)
+    const modelsDiv = document.getElementById("result-models");
+    if (result.model_probabilities) {
+        modelsDiv.classList.remove("hidden");
+        const mg = document.getElementById("models-grid");
+        const mp = result.model_probabilities;
+        mg.innerHTML = `
+            <div class="feature-item"><span class="name">XGBoost</span><span class="value">${(mp.xgboost * 100).toFixed(1)}%</span></div>
+            <div class="feature-item"><span class="name">Gradient Boosting</span><span class="value">${(mp.gradient_boosting * 100).toFixed(1)}%</span></div>
+            <div class="feature-item"><span class="name">Logistic Regression</span><span class="value">${(mp.logistic_regression * 100).toFixed(1)}%</span></div>
+            <div class="feature-item"><span class="name">Agreement</span><span class="value ${mp.agreement > 0.7 ? 'positive' : mp.agreement < 0.4 ? 'negative' : ''}">${(mp.agreement * 100).toFixed(0)}%</span></div>
+        `;
+    } else {
+        modelsDiv.classList.add("hidden");
+    }
+
+    // Value bet
+    const vbDiv = document.getElementById("result-value-bet");
+    if (result.value_bet) {
+        vbDiv.classList.remove("hidden");
+        const vb = result.value_bet;
+        let html = `<div class="features-grid">
+            <div class="feature-item"><span class="name">${result.team1.name} implied</span><span class="value">${(vb.team1_implied_prob * 100).toFixed(1)}%</span></div>
+            <div class="feature-item"><span class="name">${result.team2.name} implied</span><span class="value">${(vb.team2_implied_prob * 100).toFixed(1)}%</span></div>
+            <div class="feature-item"><span class="name">${result.team1.name} edge</span><span class="value ${vb.team1_edge > 0 ? 'positive' : 'negative'}">${(vb.team1_edge * 100).toFixed(1)}%</span></div>
+            <div class="feature-item"><span class="name">${result.team2.name} edge</span><span class="value ${vb.team2_edge > 0 ? 'positive' : 'negative'}">${(vb.team2_edge * 100).toFixed(1)}%</span></div>
+        </div>`;
+        if (vb.recommendation) {
+            const r = vb.recommendation;
+            html += `<div class="value-bet-rec ${r.rating}">
+                VALUE BET: <strong>${r.team}</strong> @ ${r.odds} (edge: ${r.edge}%, EV: +${(r.ev_per_unit * 100).toFixed(1)}% per unit) [${r.rating.toUpperCase()}]
+            </div>`;
+        }
+        document.getElementById("value-bet-content").innerHTML = html;
+    } else {
+        vbDiv.classList.add("hidden");
+    }
 
     // Features
     const grid = document.getElementById("features-grid");

@@ -57,24 +57,36 @@ def api_predict():
     team2_id = data.get("team2_id")
     map_name = data.get("map_name")
     is_lan = data.get("is_lan", False)
+    best_of = data.get("best_of", 1)
+    event_name = data.get("event_name", "")
+    is_playoff = data.get("is_playoff", False)
+    odds_t1 = data.get("bookmaker_odds_team1")
+    odds_t2 = data.get("bookmaker_odds_team2")
 
     if not team1_id or not team2_id:
         return jsonify({"error": "team1_id and team2_id are required"}), 400
 
     predictor = get_predictor()
-    result = predictor.predict(int(team1_id), int(team2_id), map_name=map_name, is_lan=is_lan)
+    result = predictor.predict(
+        int(team1_id), int(team2_id), map_name=map_name, is_lan=is_lan,
+        best_of=int(best_of), event_name=event_name, is_playoff=is_playoff,
+        bookmaker_odds_t1=float(odds_t1) if odds_t1 else None,
+        bookmaker_odds_t2=float(odds_t2) if odds_t2 else None,
+    )
 
     # Store prediction
     conn = get_connection()
     conn.execute("""
         INSERT INTO predictions (team1_id, team2_id, team1_win_prob, team2_win_prob,
-                                 predicted_winner_id, confidence, features_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+                                 predicted_winner_id, confidence, confidence_label,
+                                 method, features_json, analysis_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         team1_id, team2_id,
         result["team1"]["win_prob"], result["team2"]["win_prob"],
         result["predicted_winner_id"], result["confidence"],
-        json.dumps(result["features"]),
+        result["confidence_label"], result["method"],
+        json.dumps(result["features"]), json.dumps(result["analysis"]),
     ))
     conn.commit()
     conn.close()
@@ -143,7 +155,7 @@ def api_prediction_history():
     preds = conn.execute("""
         SELECT p.id, p.created_at,
                p.team1_win_prob, p.team2_win_prob,
-               p.confidence,
+               p.confidence, p.confidence_label, p.method,
                t1.name as team1_name, t2.name as team2_name,
                tw.name as predicted_winner
         FROM predictions p
