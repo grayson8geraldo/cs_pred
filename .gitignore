@@ -11,6 +11,8 @@ venv/
 *.sqlite3
 data/cs_pred.db
 models/xgboost_model.json
+models/ensemble_model.pkl
+models/calibrator.pkl
 models/feature_columns.json
 .idea/
 .vscode/
