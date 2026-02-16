@@ -78,7 +78,7 @@ def cmd_predict():
 
     conn = get_connection()
     teams = conn.execute(
-        "SELECT id, name, world_ranking FROM teams ORDER BY world_ranking ASC NULLS LAST LIMIT 30"
+        "SELECT id, name, world_ranking FROM teams ORDER BY world_ranking ASC NULLS LAST LIMIT 65"
     ).fetchall()
     conn.close()
 
