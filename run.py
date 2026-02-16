@@ -28,8 +28,8 @@ def cmd_serve():
     """Start the web server."""
     from web.app import create_app
     app = create_app()
-    logger.info("Starting CS2 Predictor web server on http://0.0.0.0:5000")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    logger.info("Starting CS2 Predictor web server on http://0.0.0.0:8080")
+    app.run(host="0.0.0.0", port=8080, debug=True)
 
 
 def cmd_seed():
