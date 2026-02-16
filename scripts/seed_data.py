@@ -1,7 +1,9 @@
 """
 Seed database with realistic CS2 team data, players, and match history.
 Includes player ratings, AWPer roles, roster stability, map strengths.
-60+ teams across all major regions with named rosters for top 20.
+60+ teams across all major regions with named rosters for top 30.
+
+Data sourced from HLTV rankings as of February 2026.
 """
 
 import sys
@@ -20,254 +22,289 @@ logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════
 # TEAMS: (name, ranking, strength, roster_age_days, roster_changes, country)
+# Rankings based on HLTV World Ranking — February 16, 2026
 # ═══════════════════════════════════════════════════════════════
 
 TOP_TEAMS = [
     # --- Tier 1: Top 10 ---
-    ("Natus Vincere", 1, 0.93, 200, 0, "UA"),
-    ("FaZe Clan", 2, 0.91, 180, 0, "EU"),
-    ("G2 Esports", 3, 0.90, 150, 1, "EU"),
-    ("Team Vitality", 4, 0.89, 220, 0, "FR"),
-    ("MOUZ", 5, 0.88, 160, 0, "EU"),
-    ("Team Spirit", 6, 0.87, 190, 0, "RU"),
-    ("Heroic", 7, 0.85, 120, 1, "DK"),
-    ("Virtus.pro", 8, 0.84, 140, 0, "RU"),
-    ("Team Liquid", 9, 0.83, 100, 1, "US"),
-    ("Complexity Gaming", 10, 0.82, 130, 0, "US"),
+    ("Team Vitality", 1, 0.95, 200, 1, "FR"),         # Won both 2025 Majors, IEM Krakow 2026
+    ("FURIA Esports", 2, 0.91, 300, 2, "BR"),          # International roster now (YEKINDAR, molodoy)
+    ("Team Falcons", 3, 0.88, 400, 1, "SA"),            # NiKo + m0NESY superteam
+    ("MOUZ", 4, 0.87, 180, 1, "EU"),                    # Spinx replaced siuhy
+    ("Team Spirit", 5, 0.86, 90, 2, "RU"),              # Rebuilt: chopper/zweih out, magixx IGL
+    ("PARIVISION", 6, 0.83, 180, 2, "RU"),              # Ex-VP Jame + former Spirit zweih
+    ("FaZe Clan", 7, 0.82, 150, 3, "EU"),               # Twistzz in, rain/ropz/EliGE out
+    ("Natus Vincere", 8, 0.81, 220, 1, "UA"),           # No s1mple since 2023; makazze from academy
+    ("G2 Esports", 9, 0.80, 120, 4, "EU"),              # Completely new roster, NiKo/m0NESY gone
+    ("The MongolZ", 10, 0.79, 250, 1, "MN"),            # cobrazera replaced Senzu
 
-    # --- Tier 2: Top 20 ---
-    ("Eternal Fire", 11, 0.81, 170, 0, "TR"),
-    ("FURIA Esports", 12, 0.80, 200, 0, "BR"),
-    ("paiN Gaming", 13, 0.79, 90, 1, "BR"),
-    ("3DMAX", 14, 0.78, 110, 0, "FR"),
-    ("BIG", 15, 0.77, 80, 1, "DE"),
-    ("SAW", 16, 0.76, 150, 0, "PT"),
-    ("GamerLegion", 17, 0.75, 60, 1, "EU"),
-    ("Monte", 18, 0.74, 70, 1, "UA"),
-    ("Cloud9", 19, 0.73, 50, 2, "EU"),
-    ("fnatic", 20, 0.72, 40, 1, "EU"),
+    # --- Tier 2: 11-20 ---
+    ("Aurora", 11, 0.78, 300, 1, "RS"),                  # Former Eternal Fire core (XANTARES, woxic)
+    ("Astralis", 12, 0.75, 60, 3, "DK"),                # First intl signings: phzy, ryu; dev1ce left
+    ("3DMAX", 13, 0.74, 200, 0, "FR"),                   # Stable French roster
+    ("FUT Esports", 14, 0.73, 150, 1, "TR"),             # Intl roster (ex-NaVi Junior core)
+    ("Team Liquid", 15, 0.72, 200, 3, "US"),             # siuhy IGL, NertZ, ultimate joined
+    ("B8", 16, 0.70, 180, 0, "UA"),                      # Ukrainian roster
+    ("Passion UA", 17, 0.70, 120, 2, "UA"),              # Zinchenko org; JT, Grim, Senzu loan
+    ("paiN Gaming", 18, 0.69, 100, 2, "BR"),             # All-Brazilian, vsm + piriajr joined
+    ("NRG Esports", 19, 0.68, 200, 1, "US"),             # nitr0 IGL, oSee AWP
+    ("GamerLegion", 20, 0.67, 120, 2, "EU"),             # Snax IGL return, REZ joined
 
-    # --- Tier 2-3: Ranks 21-30 ---
-    ("Astralis", 21, 0.71, 90, 1, "DK"),
-    ("9 Pandas", 22, 0.70, 100, 0, "RU"),
-    ("Imperial Esports", 23, 0.69, 130, 0, "BR"),
-    ("ECSTATIC", 24, 0.68, 110, 1, "DK"),
-    ("Wildcard", 25, 0.67, 80, 0, "AU"),
-    ("TheMongolz", 26, 0.71, 200, 0, "MN"),
-    ("Lynn Vision", 27, 0.66, 120, 0, "CN"),
-    ("Passion UA", 28, 0.65, 60, 2, "UA"),
-    ("B8", 29, 0.64, 50, 1, "EU"),
-    ("MIBR", 30, 0.63, 40, 2, "BR"),
+    # --- Tier 2-3: 21-30 ---
+    ("Ninjas in Pyjamas", 21, 0.66, 150, 2, "EU"),      # Snappi IGL, sjuush from HEROIC
+    ("HEROIC", 22, 0.65, 90, 4, "NO"),                   # Completely rebuilt after Falcons exodus
+    ("Imperial Esports", 23, 0.64, 130, 1, "BR"),        # Brazilian roster
+    ("M80", 24, 0.63, 180, 1, "US"),                     # North American team
+    ("Legacy", 25, 0.62, 200, 0, "BR"),                  # arT IGL, stable BR roster
+    ("BC.Game Esports", 26, 0.66, 200, 0, "PT"),         # s1mple + electroNic + ex-SAW trio
+    ("Gentle Mates", 27, 0.60, 150, 1, "FR"),            # French roster
+    ("MIBR", 28, 0.59, 100, 2, "BR"),                    # Brazilian org
+    ("FlyQuest", 29, 0.58, 120, 1, "AU"),                # jks + INS, Australian
+    ("TYLOO", 30, 0.57, 200, 0, "CN"),                   # Chinese roster
 
-    # --- Tier 3: Ranks 31-45 ---
-    ("Ninjas in Pyjamas", 31, 0.62, 100, 1, "BR"),
-    ("OG", 32, 0.61, 80, 2, "EU"),
-    ("ENCE", 33, 0.60, 70, 1, "FI"),
-    ("Apeks", 34, 0.60, 120, 0, "NO"),
-    ("BLEED", 35, 0.59, 90, 0, "SG"),
-    ("KOI", 36, 0.58, 60, 1, "ES"),
-    ("Aurora", 37, 0.58, 100, 0, "RU"),
-    ("Into the Breach", 38, 0.57, 80, 1, "EU"),
-    ("Rare Atom", 39, 0.56, 110, 0, "CN"),
-    ("Legacy", 40, 0.56, 70, 1, "BR"),
-    ("Permitta", 41, 0.55, 90, 0, "PL"),
-    ("Nemiga", 42, 0.55, 120, 0, "BY"),
-    ("Sangal", 43, 0.54, 80, 1, "TR"),
-    ("TYLOO", 44, 0.54, 150, 0, "CN"),
-    ("Grayhound", 45, 0.53, 100, 0, "AU"),
+    # --- Tier 3: 31-45 ---
+    ("100 Thieves", 31, 0.65, 60, 5, "AU"),              # New: rain IGL, dev1ce AWP, gla1ve coach
+    ("BIG", 32, 0.61, 100, 2, "DE"),                     # blameF from fnatic, faveN joined
+    ("fnatic", 33, 0.60, 130, 2, "EU"),                  # Lost blameF, added maden
+    ("ENCE", 34, 0.59, 150, 1, "FI"),                    # Finnish core
+    ("Apeks", 35, 0.58, 120, 0, "NO"),                   # Norwegian org
+    ("BLEED", 36, 0.57, 90, 0, "SG"),                    # Southeast Asian team
+    ("KOI", 37, 0.56, 60, 1, "ES"),                      # Spanish org
+    ("Into the Breach", 38, 0.55, 80, 1, "EU"),          # European mix
+    ("Rare Atom", 39, 0.55, 110, 0, "CN"),               # Chinese team
+    ("Lynn Vision", 40, 0.54, 120, 0, "CN"),             # Chinese team
+    ("Permitta", 41, 0.53, 90, 0, "PL"),                 # Polish team
+    ("Sprout", 42, 0.52, 70, 1, "DE"),                   # German team
+    ("HAVU", 43, 0.52, 90, 1, "FI"),                     # Finnish team
+    ("Sangal", 44, 0.51, 80, 1, "TR"),                   # Turkish team
+    ("Grayhound", 45, 0.51, 100, 0, "AU"),               # Australian team
 
-    # --- Tier 3-4: Ranks 46-60 ---
-    ("Fluxo", 46, 0.52, 60, 2, "BR"),
-    ("ALTERNATE aTTaX", 47, 0.52, 130, 0, "DE"),
-    ("Insilio", 48, 0.51, 70, 1, "EU"),
-    ("Rooster", 49, 0.51, 90, 0, "AU"),
-    ("Spirit Academy", 50, 0.50, 80, 0, "RU"),
-    ("VP.Prodigy", 51, 0.50, 100, 1, "RU"),
-    ("Entropiq", 52, 0.49, 60, 2, "CZ"),
-    ("ex-Guild Eagles", 53, 0.49, 110, 0, "EU"),
-    ("Sprout", 54, 0.48, 70, 1, "DE"),
-    ("FORZE", 55, 0.48, 130, 0, "RU"),
-    ("Bad News Eagles", 56, 0.47, 200, 0, "XK"),
-    ("HAVU", 57, 0.47, 90, 1, "FI"),
-    ("Sashi", 58, 0.46, 60, 1, "DK"),
-    ("Metizport", 59, 0.46, 80, 0, "SE"),
-    ("Preasy", 60, 0.45, 50, 2, "DK"),
-
-    # --- Regional wildcards ---
-    ("Team Falcons", 61, 0.72, 150, 0, "SA"),
-    ("Viperio", 62, 0.44, 100, 1, "EU"),
-    ("Copenhagen Wolves", 63, 0.44, 70, 0, "DK"),
-    ("Nouns", 64, 0.43, 80, 1, "US"),
-    ("M80", 65, 0.43, 90, 0, "US"),
-    ("Sharks", 66, 0.42, 60, 2, "BR"),
+    # --- Tier 3-4: 46-60 ---
+    ("Fluxo", 46, 0.50, 60, 2, "BR"),
+    ("ALTERNATE aTTaX", 47, 0.50, 130, 0, "DE"),
+    ("Spirit Academy", 48, 0.49, 80, 1, "RU"),
+    ("FORZE", 49, 0.49, 130, 0, "RU"),
+    ("Bad News Eagles", 50, 0.48, 200, 0, "XK"),
+    ("Sashi", 51, 0.48, 60, 1, "DK"),
+    ("Metizport", 52, 0.47, 80, 0, "SE"),
+    ("Preasy", 53, 0.47, 50, 2, "DK"),
+    ("Wildcard", 54, 0.46, 80, 0, "AU"),
+    ("Rooster", 55, 0.46, 90, 0, "AU"),
+    ("Sharks", 56, 0.45, 60, 2, "BR"),
+    ("Nouns", 57, 0.45, 80, 1, "US"),
+    ("Insilio", 58, 0.44, 70, 1, "EU"),
+    ("Nemiga", 59, 0.44, 120, 0, "BY"),
+    ("Entropiq", 60, 0.43, 60, 2, "CZ"),
 ]
 
 # ═══════════════════════════════════════════════════════════════
 # NAMED PLAYER ROSTERS: (nickname, rating, adr, kast, kd, hs%, is_awper)
-# Real player names and approximate stats for top 20 teams
+# Real player names and approximate stats — February 2026
 # ═══════════════════════════════════════════════════════════════
 
 TEAM_PLAYERS = {
-    "Natus Vincere": [
-        ("s1mple", 1.30, 87, 0.75, 1.35, 0.42, 1),
-        ("b1t", 1.12, 78, 0.72, 1.15, 0.52, 0),
-        ("jL", 1.08, 75, 0.70, 1.10, 0.50, 0),
-        ("Aleksib", 0.98, 65, 0.68, 0.95, 0.45, 0),
-        ("iM", 1.05, 72, 0.69, 1.05, 0.48, 0),
-    ],
-    "FaZe Clan": [
-        ("broky", 1.18, 80, 0.73, 1.22, 0.38, 1),
-        ("ropz", 1.15, 78, 0.74, 1.18, 0.55, 0),
-        ("rain", 1.05, 74, 0.70, 1.08, 0.47, 0),
-        ("karrigan", 0.92, 60, 0.66, 0.88, 0.43, 0),
-        ("frozen", 1.10, 76, 0.71, 1.12, 0.52, 0),
-    ],
-    "G2 Esports": [
-        ("NiKo", 1.22, 82, 0.74, 1.25, 0.56, 0),
-        ("m0NESY", 1.25, 85, 0.72, 1.28, 0.40, 1),
-        ("huNter-", 1.08, 74, 0.70, 1.10, 0.48, 0),
-        ("nexa", 1.00, 68, 0.69, 1.02, 0.46, 0),
-        ("HooXi", 0.85, 55, 0.64, 0.82, 0.42, 0),
-    ],
     "Team Vitality": [
         ("ZywOo", 1.28, 86, 0.76, 1.32, 0.42, 1),
+        ("ropz", 1.15, 78, 0.74, 1.18, 0.55, 0),
         ("flameZ", 1.10, 76, 0.71, 1.12, 0.50, 0),
-        ("apEX", 0.95, 65, 0.67, 0.92, 0.45, 0),
-        ("Spinx", 1.08, 74, 0.70, 1.08, 0.49, 0),
         ("mezii", 1.02, 70, 0.69, 1.00, 0.47, 0),
-    ],
-    "MOUZ": [
-        ("torzsi", 1.12, 77, 0.72, 1.15, 0.40, 1),
-        ("xertioN", 1.08, 75, 0.70, 1.10, 0.52, 0),
-        ("Jimpphat", 1.05, 73, 0.69, 1.06, 0.50, 0),
-        ("siuhy", 0.95, 64, 0.67, 0.92, 0.44, 0),
-        ("Brollan", 1.10, 76, 0.71, 1.12, 0.53, 0),
-    ],
-    "Team Spirit": [
-        ("donk", 1.20, 83, 0.74, 1.24, 0.50, 0),
-        ("zont1x", 1.08, 75, 0.70, 1.10, 0.48, 0),
-        ("chopper", 0.95, 64, 0.67, 0.93, 0.44, 0),
-        ("magixx", 1.10, 77, 0.71, 1.12, 0.46, 0),
-        ("patsi", 1.02, 70, 0.68, 1.04, 0.42, 1),
-    ],
-    "Heroic": [
-        ("TeSeS", 1.10, 76, 0.71, 1.12, 0.50, 0),
-        ("sjuush", 1.05, 73, 0.70, 1.08, 0.48, 0),
-        ("nicoodoz", 1.12, 78, 0.72, 1.15, 0.38, 1),
-        ("kyxsan", 0.95, 64, 0.67, 0.92, 0.44, 0),
-        ("jabbi", 1.08, 75, 0.70, 1.10, 0.52, 0),
-    ],
-    "Virtus.pro": [
-        ("Jame", 1.08, 72, 0.70, 1.10, 0.35, 1),
-        ("n0rb3r7", 1.05, 74, 0.69, 1.06, 0.50, 0),
-        ("fame", 1.02, 70, 0.68, 1.03, 0.48, 0),
-        ("FL1T", 1.00, 68, 0.67, 1.00, 0.46, 0),
-        ("Qikert", 0.98, 66, 0.66, 0.96, 0.44, 0),
-    ],
-    "Team Liquid": [
-        ("NAF", 1.12, 76, 0.72, 1.14, 0.48, 0),
-        ("EliGE", 1.10, 78, 0.71, 1.12, 0.52, 0),
-        ("oSee", 1.05, 72, 0.69, 1.06, 0.36, 1),
-        ("nitr0", 0.95, 64, 0.67, 0.92, 0.44, 0),
-        ("YEKINDAR", 1.08, 75, 0.70, 1.08, 0.50, 0),
-    ],
-    "Complexity Gaming": [
-        ("JT", 0.95, 64, 0.67, 0.93, 0.44, 0),
-        ("floppy", 1.08, 74, 0.70, 1.10, 0.50, 0),
-        ("hallzerk", 1.12, 76, 0.71, 1.14, 0.38, 1),
-        ("Grim", 1.05, 72, 0.69, 1.06, 0.48, 0),
-        ("FaNg", 1.00, 68, 0.68, 1.00, 0.46, 0),
-    ],
-    "Eternal Fire": [
-        ("woxic", 1.15, 78, 0.72, 1.18, 0.36, 1),
-        ("XANTARES", 1.18, 82, 0.73, 1.20, 0.58, 0),
-        ("Calyx", 1.02, 70, 0.68, 1.04, 0.48, 0),
-        ("MAJ3R", 0.92, 62, 0.66, 0.90, 0.44, 0),
-        ("imoRR", 1.05, 73, 0.69, 1.06, 0.50, 0),
+        ("apEX", 0.95, 65, 0.67, 0.92, 0.45, 0),
     ],
     "FURIA Esports": [
         ("KSCERATO", 1.15, 78, 0.73, 1.18, 0.52, 0),
         ("yuurih", 1.10, 76, 0.71, 1.12, 0.50, 0),
-        ("FalleN", 1.02, 70, 0.68, 1.04, 0.38, 1),
-        ("chelo", 1.00, 68, 0.67, 1.00, 0.46, 0),
-        ("drop", 0.98, 66, 0.66, 0.96, 0.48, 0),
+        ("YEKINDAR", 1.08, 75, 0.70, 1.08, 0.50, 0),
+        ("molodoy", 1.05, 72, 0.69, 1.06, 0.38, 1),
+        ("FalleN", 1.00, 68, 0.68, 1.00, 0.40, 0),
     ],
-    "paiN Gaming": [
-        ("biguzera", 1.12, 76, 0.71, 1.14, 0.50, 0),
-        ("skullz", 1.05, 73, 0.69, 1.06, 0.48, 0),
-        ("NQZ", 1.02, 70, 0.68, 1.03, 0.38, 1),
-        ("lux", 0.98, 66, 0.66, 0.96, 0.46, 0),
-        ("zevy", 0.95, 64, 0.65, 0.93, 0.44, 0),
+    "Team Falcons": [
+        ("NiKo", 1.22, 82, 0.74, 1.25, 0.56, 0),
+        ("m0NESY", 1.25, 85, 0.73, 1.28, 0.40, 1),
+        ("TeSeS", 1.08, 75, 0.71, 1.10, 0.50, 0),
+        ("kyxsan", 0.95, 64, 0.67, 0.92, 0.44, 0),
+        ("kyousuke", 1.05, 73, 0.69, 1.06, 0.48, 0),
+    ],
+    "MOUZ": [
+        ("torzsi", 1.12, 77, 0.72, 1.15, 0.40, 1),
+        ("Brollan", 1.10, 76, 0.71, 1.12, 0.53, 0),
+        ("Spinx", 1.08, 74, 0.70, 1.08, 0.49, 0),
+        ("Jimpphat", 1.05, 73, 0.69, 1.06, 0.50, 0),
+        ("xertioN", 1.02, 71, 0.68, 1.03, 0.52, 0),
+    ],
+    "Team Spirit": [
+        ("donk", 1.20, 83, 0.74, 1.24, 0.50, 0),
+        ("sh1ro", 1.15, 78, 0.72, 1.18, 0.38, 1),
+        ("magixx", 1.05, 72, 0.69, 1.06, 0.46, 0),
+        ("zont1x", 1.08, 75, 0.70, 1.10, 0.48, 0),
+        ("tN1R", 0.98, 66, 0.66, 0.96, 0.44, 0),
+    ],
+    "PARIVISION": [
+        ("Jame", 1.08, 72, 0.70, 1.10, 0.35, 1),
+        ("zweih", 1.05, 73, 0.69, 1.06, 0.48, 0),
+        ("BELCHONOKK", 1.02, 70, 0.68, 1.03, 0.46, 0),
+        ("xiELO", 1.00, 68, 0.67, 1.00, 0.50, 0),
+        ("nota", 0.98, 66, 0.66, 0.96, 0.44, 0),
+    ],
+    "FaZe Clan": [
+        ("broky", 1.12, 78, 0.72, 1.15, 0.38, 1),
+        ("Twistzz", 1.12, 77, 0.72, 1.14, 0.54, 0),
+        ("frozen", 1.08, 75, 0.70, 1.10, 0.52, 0),
+        ("karrigan", 0.92, 60, 0.66, 0.88, 0.43, 0),
+        ("jcobbb", 1.00, 68, 0.68, 1.00, 0.48, 0),
+    ],
+    "Natus Vincere": [
+        ("b1t", 1.12, 78, 0.72, 1.15, 0.52, 0),
+        ("w0nderful", 1.10, 76, 0.71, 1.12, 0.38, 1),
+        ("iM", 1.05, 72, 0.69, 1.05, 0.48, 0),
+        ("Aleksib", 0.98, 65, 0.68, 0.95, 0.45, 0),
+        ("makazze", 1.00, 68, 0.67, 1.00, 0.46, 0),
+    ],
+    "G2 Esports": [
+        ("SunPayus", 1.08, 74, 0.70, 1.10, 0.38, 1),
+        ("HeavyGod", 1.05, 73, 0.69, 1.06, 0.50, 0),
+        ("huNter-", 1.05, 72, 0.69, 1.06, 0.48, 0),
+        ("malbsMd", 1.00, 68, 0.67, 1.00, 0.46, 0),
+        ("MATYS", 0.98, 66, 0.66, 0.96, 0.50, 0),
+    ],
+    "The MongolZ": [
+        ("bLitz", 1.12, 76, 0.71, 1.14, 0.50, 0),
+        ("Techno4K", 1.08, 74, 0.70, 1.10, 0.48, 0),
+        ("mzinho", 1.05, 72, 0.69, 1.06, 0.46, 0),
+        ("910", 1.00, 68, 0.67, 1.00, 0.44, 0),
+        ("cobrazera", 1.02, 70, 0.68, 1.03, 0.42, 0),
+    ],
+    "Aurora": [
+        ("XANTARES", 1.18, 82, 0.73, 1.20, 0.58, 0),
+        ("woxic", 1.12, 77, 0.71, 1.14, 0.36, 1),
+        ("Wicadia", 1.05, 73, 0.69, 1.06, 0.50, 0),
+        ("MAJ3R", 0.92, 62, 0.66, 0.90, 0.44, 0),
+        ("soulfly", 1.00, 68, 0.67, 1.00, 0.48, 0),
+    ],
+    "Astralis": [
+        ("jabbi", 1.08, 75, 0.70, 1.10, 0.52, 0),
+        ("Staehr", 1.05, 73, 0.69, 1.06, 0.48, 0),
+        ("phzy", 1.05, 72, 0.69, 1.06, 0.38, 1),
+        ("HooXi", 0.90, 58, 0.65, 0.86, 0.42, 0),
+        ("ryu", 1.00, 68, 0.67, 1.00, 0.46, 0),
     ],
     "3DMAX": [
         ("Graviti", 1.08, 74, 0.70, 1.10, 0.50, 0),
-        ("Djoko", 1.05, 72, 0.69, 1.06, 0.48, 0),
-        ("Ex3rcice", 1.02, 70, 0.68, 1.03, 0.46, 0),
+        ("Ex3rcice", 1.05, 72, 0.69, 1.06, 0.46, 0),
+        ("bodyy", 1.02, 70, 0.68, 1.03, 0.48, 0),
         ("Lucky", 1.00, 68, 0.67, 1.00, 0.38, 1),
         ("Maka", 0.95, 64, 0.66, 0.93, 0.44, 0),
     ],
-    "BIG": [
-        ("tabseN", 1.10, 76, 0.71, 1.12, 0.50, 0),
-        ("syrsoN", 1.08, 74, 0.70, 1.10, 0.36, 1),
-        ("Krimbo", 1.05, 73, 0.69, 1.06, 0.52, 0),
-        ("prosus", 1.00, 68, 0.67, 1.00, 0.48, 0),
-        ("rigon", 0.98, 66, 0.66, 0.96, 0.46, 0),
+    "FUT Esports": [
+        ("dem0n", 1.05, 73, 0.69, 1.06, 0.48, 0),
+        ("lauNX", 1.02, 70, 0.68, 1.03, 0.46, 0),
+        ("Krabeni", 1.00, 68, 0.67, 1.00, 0.50, 0),
+        ("cmtry", 0.98, 66, 0.66, 0.96, 0.44, 0),
+        ("dziugss", 0.95, 64, 0.65, 0.93, 0.42, 0),
     ],
-    "SAW": [
-        ("MUTiRiS", 1.08, 74, 0.70, 1.10, 0.48, 0),
-        ("arrozdoce", 1.05, 72, 0.69, 1.06, 0.46, 0),
-        ("story", 1.02, 70, 0.68, 1.03, 0.50, 0),
-        ("ewjerkz", 1.00, 68, 0.67, 1.00, 0.38, 1),
-        ("roman", 0.95, 64, 0.66, 0.93, 0.44, 0),
+    "Team Liquid": [
+        ("EliGE", 1.10, 78, 0.71, 1.12, 0.52, 0),
+        ("NAF", 1.08, 75, 0.70, 1.10, 0.48, 0),
+        ("NertZ", 1.05, 73, 0.69, 1.06, 0.50, 0),
+        ("siuhy", 0.95, 64, 0.67, 0.92, 0.44, 0),
+        ("ultimate", 1.00, 68, 0.67, 1.00, 0.46, 0),
+    ],
+    "B8": [
+        ("alex666", 1.05, 73, 0.69, 1.06, 0.48, 0),
+        ("npl", 1.02, 70, 0.68, 1.03, 0.46, 0),
+        ("kensizor", 1.00, 68, 0.67, 1.00, 0.38, 1),
+        ("esenthial", 0.98, 66, 0.66, 0.96, 0.44, 0),
+        ("s1zzi", 0.95, 64, 0.65, 0.93, 0.42, 0),
+    ],
+    "Passion UA": [
+        ("JT", 0.95, 64, 0.67, 0.93, 0.44, 0),
+        ("Grim", 1.05, 72, 0.69, 1.06, 0.48, 0),
+        ("nicx", 1.02, 70, 0.68, 1.03, 0.46, 0),
+        ("Senzu", 1.05, 72, 0.69, 1.06, 0.38, 1),
+        ("Kvem", 0.98, 66, 0.66, 0.96, 0.44, 0),
+    ],
+    "paiN Gaming": [
+        ("biguzera", 1.10, 76, 0.71, 1.12, 0.50, 0),
+        ("skullz", 1.05, 73, 0.69, 1.06, 0.48, 0),
+        ("NQZ", 1.02, 70, 0.68, 1.03, 0.38, 1),
+        ("vsm", 0.98, 66, 0.66, 0.96, 0.46, 0),
+        ("piriajr", 0.95, 64, 0.65, 0.93, 0.44, 0),
+    ],
+    "NRG Esports": [
+        ("oSee", 1.05, 72, 0.69, 1.06, 0.36, 1),
+        ("Sonic", 1.02, 70, 0.68, 1.03, 0.50, 0),
+        ("br0", 1.00, 68, 0.67, 1.00, 0.48, 0),
+        ("nitr0", 0.95, 64, 0.67, 0.92, 0.44, 0),
+        ("Jeorge", 0.98, 66, 0.66, 0.96, 0.46, 0),
     ],
     "GamerLegion": [
-        ("iM", 1.08, 74, 0.70, 1.10, 0.50, 0),
-        ("acoR", 1.05, 72, 0.69, 1.06, 0.36, 1),
-        ("isak", 1.02, 70, 0.68, 1.03, 0.52, 0),
-        ("siuhy", 0.98, 66, 0.66, 0.96, 0.44, 0),
-        ("keoz", 1.00, 68, 0.67, 1.00, 0.48, 0),
+        ("REZ", 1.05, 73, 0.69, 1.06, 0.52, 0),
+        ("Tauson", 1.02, 70, 0.68, 1.03, 0.48, 0),
+        ("Snax", 0.95, 64, 0.67, 0.93, 0.44, 0),
+        ("hypex", 1.00, 68, 0.67, 1.00, 0.46, 0),
+        ("PR", 0.98, 66, 0.66, 0.96, 0.50, 0),
     ],
-    "Monte": [
-        ("DemQQ", 1.08, 74, 0.70, 1.10, 0.50, 0),
-        ("kraghen", 1.05, 72, 0.69, 1.06, 0.48, 0),
-        ("Woro2k", 1.02, 70, 0.68, 1.03, 0.38, 1),
-        ("BOROS", 0.98, 66, 0.66, 0.96, 0.46, 0),
-        ("sdy", 0.95, 64, 0.65, 0.93, 0.44, 0),
+    "Ninjas in Pyjamas": [
+        ("sjuush", 1.05, 73, 0.70, 1.08, 0.48, 0),
+        ("r1nkle", 1.02, 70, 0.68, 1.03, 0.46, 0),
+        ("xKacpersky", 1.00, 68, 0.67, 1.00, 0.38, 1),
+        ("Snappi", 0.92, 62, 0.66, 0.90, 0.44, 0),
+        ("cairne", 0.98, 66, 0.66, 0.96, 0.42, 0),
     ],
-    "Cloud9": [
-        ("sh1ro", 1.15, 78, 0.72, 1.18, 0.38, 1),
-        ("Ax1Le", 1.12, 76, 0.71, 1.14, 0.52, 0),
-        ("HObbit", 1.00, 68, 0.68, 1.00, 0.46, 0),
-        ("buster", 1.05, 72, 0.69, 1.06, 0.48, 0),
-        ("nafany", 0.92, 62, 0.65, 0.90, 0.44, 0),
+    "HEROIC": [
+        ("xfl0ud", 1.05, 73, 0.69, 1.06, 0.50, 0),
+        ("nilo", 1.02, 70, 0.68, 1.03, 0.38, 1),
+        ("susp", 1.00, 68, 0.67, 1.00, 0.48, 0),
+        ("Chr1zN", 0.98, 66, 0.66, 0.96, 0.46, 0),
+        ("alkarenn", 0.95, 64, 0.65, 0.93, 0.44, 0),
     ],
-    "fnatic": [
-        ("mezii", 1.05, 73, 0.69, 1.06, 0.48, 0),
-        ("KRIMZ", 1.02, 70, 0.68, 1.03, 0.46, 0),
-        ("roeJ", 1.00, 68, 0.67, 1.00, 0.50, 0),
-        ("nicoodoz", 1.08, 74, 0.70, 1.10, 0.38, 1),
-        ("FASHR", 0.95, 64, 0.66, 0.93, 0.44, 0),
+    "Imperial Esports": [
+        ("chelo", 1.05, 73, 0.69, 1.06, 0.48, 0),
+        ("VINI", 1.02, 70, 0.68, 1.03, 0.46, 0),
+        ("skullz", 1.00, 68, 0.67, 1.00, 0.50, 0),
+        ("noway", 0.98, 66, 0.66, 0.96, 0.44, 0),
+        ("try", 0.95, 64, 0.65, 0.93, 0.42, 0),
     ],
-    "Astralis": [
+    "M80": [
+        ("slaxz-", 1.05, 73, 0.69, 1.06, 0.50, 0),
+        ("Swisher", 1.02, 70, 0.68, 1.03, 0.48, 0),
+        ("s1n", 1.00, 68, 0.67, 1.00, 0.38, 1),
+        ("JBa", 0.98, 66, 0.66, 0.96, 0.46, 0),
+        ("Lake", 0.95, 64, 0.65, 0.93, 0.44, 0),
+    ],
+    "Legacy": [
+        ("arT", 1.02, 71, 0.68, 1.03, 0.46, 0),
+        ("dumau", 1.05, 73, 0.69, 1.06, 0.48, 0),
+        ("latto", 1.00, 68, 0.67, 1.00, 0.38, 1),
+        ("n1ssim", 0.98, 66, 0.66, 0.96, 0.44, 0),
+        ("saadzin", 0.95, 64, 0.65, 0.93, 0.42, 0),
+    ],
+    "BC.Game Esports": [
+        ("s1mple", 1.18, 80, 0.73, 1.20, 0.42, 1),
+        ("electroNic", 1.10, 76, 0.71, 1.12, 0.50, 0),
+        ("MUTiRiS", 1.05, 73, 0.69, 1.06, 0.48, 0),
+        ("aragornN", 0.98, 66, 0.66, 0.96, 0.44, 0),
+        ("krazy", 0.95, 64, 0.65, 0.93, 0.42, 0),
+    ],
+    "FlyQuest": [
+        ("jks", 1.08, 75, 0.70, 1.10, 0.50, 0),
+        ("INS", 1.05, 72, 0.69, 1.06, 0.36, 1),
+        ("Vexite", 1.00, 68, 0.67, 1.00, 0.48, 0),
+        ("nettik", 0.98, 66, 0.66, 0.96, 0.46, 0),
+        ("story", 0.95, 64, 0.65, 0.93, 0.44, 0),
+    ],
+    "TYLOO": [
+        ("JamYoung", 1.02, 70, 0.68, 1.03, 0.48, 0),
+        ("Jee", 1.00, 68, 0.67, 1.00, 0.46, 0),
+        ("Mercury", 0.98, 66, 0.66, 0.96, 0.38, 1),
+        ("Moseyuh", 0.95, 64, 0.65, 0.93, 0.44, 0),
+        ("Zero", 0.92, 62, 0.64, 0.90, 0.42, 0),
+    ],
+    "100 Thieves": [
         ("dev1ce", 1.12, 76, 0.72, 1.14, 0.38, 1),
-        ("blameF", 1.05, 73, 0.69, 1.06, 0.50, 0),
-        ("Staehr", 1.02, 70, 0.68, 1.03, 0.48, 0),
-        ("br0", 0.98, 66, 0.66, 0.96, 0.46, 0),
-        ("Buzz", 0.95, 64, 0.65, 0.93, 0.44, 0),
-    ],
-    "TheMongolz": [
-        ("bLitz", 1.12, 76, 0.71, 1.14, 0.50, 0),
-        ("Techno", 1.08, 74, 0.70, 1.10, 0.48, 0),
-        ("Senzu", 1.05, 72, 0.69, 1.06, 0.38, 1),
-        ("mzinho", 1.00, 68, 0.67, 1.00, 0.46, 0),
-        ("910", 0.98, 66, 0.66, 0.96, 0.44, 0),
-    ],
-    "Team Falcons": [
-        ("dupreeh", 1.05, 73, 0.69, 1.06, 0.48, 0),
-        ("Magisk", 1.08, 75, 0.70, 1.10, 0.50, 0),
-        ("refrezh", 1.02, 70, 0.68, 1.03, 0.46, 0),
-        ("gla1ve", 0.95, 64, 0.67, 0.93, 0.44, 0),
-        ("k0nfig", 1.10, 77, 0.71, 1.12, 0.54, 0),
+        ("rain", 1.02, 70, 0.68, 1.03, 0.47, 0),
+        ("Ag1l", 1.00, 68, 0.67, 1.00, 0.50, 0),
+        ("sirah", 0.98, 66, 0.66, 0.96, 0.46, 0),
+        ("poiii", 0.95, 64, 0.65, 0.93, 0.44, 0),
     ],
 }
 
@@ -275,7 +312,7 @@ TEAM_PLAYERS = {
 # CS2 MAP POOL
 # ═══════════════════════════════════════════════════════════════
 
-MAPS = ["Mirage", "Inferno", "Nuke", "Overpass", "Ancient", "Anubis", "Dust2"]
+MAPS = ["Mirage", "Inferno", "Nuke", "Ancient", "Anubis", "Dust2", "Overpass"]
 
 # ═══════════════════════════════════════════════════════════════
 # MAP STRENGTHS: team → {map: adjustment}
@@ -283,27 +320,25 @@ MAPS = ["Mirage", "Inferno", "Nuke", "Overpass", "Ancient", "Anubis", "Dust2"]
 # ═══════════════════════════════════════════════════════════════
 
 MAP_STRENGTHS = {
-    "Natus Vincere": {"Inferno": 0.15, "Nuke": 0.10, "Dust2": -0.10, "Anubis": 0.05},
-    "FaZe Clan": {"Mirage": 0.12, "Overpass": 0.10, "Ancient": -0.08, "Inferno": 0.06},
-    "G2 Esports": {"Nuke": 0.15, "Inferno": 0.08, "Anubis": -0.10, "Overpass": 0.05},
     "Team Vitality": {"Overpass": 0.12, "Ancient": 0.10, "Mirage": -0.05, "Nuke": 0.08},
-    "MOUZ": {"Anubis": 0.12, "Dust2": 0.08, "Nuke": -0.10, "Mirage": 0.05},
-    "Team Spirit": {"Inferno": 0.10, "Mirage": 0.08, "Ancient": -0.06, "Overpass": 0.05},
-    "Heroic": {"Nuke": 0.12, "Overpass": 0.08, "Dust2": -0.08, "Ancient": 0.05},
-    "Virtus.pro": {"Mirage": 0.10, "Dust2": 0.08, "Nuke": -0.06, "Anubis": 0.04},
-    "Team Liquid": {"Inferno": 0.10, "Overpass": 0.08, "Anubis": -0.08, "Nuke": 0.05},
-    "Complexity Gaming": {"Ancient": 0.10, "Nuke": 0.06, "Mirage": -0.06, "Dust2": 0.04},
-    "Eternal Fire": {"Dust2": 0.12, "Mirage": 0.10, "Overpass": -0.08, "Inferno": 0.05},
     "FURIA Esports": {"Mirage": 0.12, "Inferno": 0.08, "Nuke": -0.10, "Overpass": 0.04},
-    "paiN Gaming": {"Dust2": 0.10, "Mirage": 0.06, "Ancient": -0.08, "Inferno": 0.04},
-    "3DMAX": {"Inferno": 0.10, "Nuke": 0.08, "Dust2": -0.06, "Anubis": 0.04},
-    "BIG": {"Nuke": 0.12, "Overpass": 0.08, "Mirage": -0.06, "Ancient": 0.04},
-    "SAW": {"Overpass": 0.10, "Ancient": 0.06, "Inferno": -0.06, "Nuke": 0.04},
-    "Cloud9": {"Inferno": 0.10, "Anubis": 0.08, "Dust2": -0.08, "Mirage": 0.04},
-    "fnatic": {"Mirage": 0.10, "Inferno": 0.06, "Nuke": -0.08, "Ancient": 0.04},
+    "Team Falcons": {"Nuke": 0.12, "Inferno": 0.10, "Anubis": -0.06, "Dust2": 0.05},
+    "MOUZ": {"Anubis": 0.12, "Dust2": 0.08, "Nuke": -0.10, "Mirage": 0.05},
+    "Team Spirit": {"Inferno": 0.12, "Mirage": 0.10, "Ancient": -0.06, "Overpass": 0.05},
+    "PARIVISION": {"Mirage": 0.10, "Dust2": 0.08, "Nuke": -0.06, "Anubis": 0.04},
+    "FaZe Clan": {"Mirage": 0.12, "Overpass": 0.10, "Ancient": -0.08, "Inferno": 0.06},
+    "Natus Vincere": {"Inferno": 0.12, "Nuke": 0.08, "Dust2": -0.08, "Anubis": 0.05},
+    "G2 Esports": {"Nuke": 0.10, "Inferno": 0.08, "Anubis": -0.08, "Overpass": 0.05},
+    "The MongolZ": {"Mirage": 0.12, "Dust2": 0.10, "Nuke": -0.08, "Anubis": 0.04},
+    "Aurora": {"Dust2": 0.12, "Mirage": 0.10, "Overpass": -0.08, "Inferno": 0.05},
     "Astralis": {"Nuke": 0.15, "Inferno": 0.10, "Overpass": -0.05, "Dust2": 0.04},
-    "TheMongolz": {"Mirage": 0.12, "Dust2": 0.10, "Nuke": -0.08, "Anubis": 0.04},
-    "Team Falcons": {"Inferno": 0.10, "Nuke": 0.08, "Dust2": -0.06, "Overpass": 0.05},
+    "3DMAX": {"Inferno": 0.10, "Nuke": 0.08, "Dust2": -0.06, "Anubis": 0.04},
+    "Team Liquid": {"Inferno": 0.10, "Overpass": 0.08, "Anubis": -0.08, "Nuke": 0.05},
+    "BC.Game Esports": {"Inferno": 0.10, "Nuke": 0.08, "Mirage": -0.06, "Overpass": 0.04},
+    "100 Thieves": {"Nuke": 0.12, "Inferno": 0.08, "Dust2": -0.06, "Ancient": 0.04},
+    "paiN Gaming": {"Dust2": 0.10, "Mirage": 0.06, "Ancient": -0.08, "Inferno": 0.04},
+    "NRG Esports": {"Ancient": 0.08, "Nuke": 0.06, "Mirage": -0.06, "Dust2": 0.04},
+    "FlyQuest": {"Mirage": 0.10, "Inferno": 0.06, "Nuke": -0.08, "Ancient": 0.04},
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -312,23 +347,25 @@ MAP_STRENGTHS = {
 
 EVENTS = [
     # Tier 5 — Majors
-    ("PGL Major Copenhagen", True, 5, True),
-    ("PGL Major Austin", True, 5, True),
+    ("PGL Major Copenhagen 2025", True, 5, True),
+    ("PGL Major Austin 2025", True, 5, True),
+    ("PGL Major Cluj-Napoca 2026", True, 5, True),
     # Tier 4 — Big LAN events
-    ("BLAST Premier World Final", True, 4, True),
-    ("IEM Katowice", True, 4, True),
-    ("IEM Cologne", True, 4, True),
-    ("ESL Pro League S20", True, 4, False),
-    ("BLAST Premier Spring Finals", True, 4, True),
-    ("BLAST Premier Fall Finals", True, 4, True),
-    ("IEM Dallas", True, 4, False),
-    ("IEM Sydney", True, 4, False),
+    ("BLAST Premier World Final 2025", True, 4, True),
+    ("IEM Katowice 2025", True, 4, True),
+    ("IEM Cologne 2025", True, 4, True),
+    ("IEM Krakow 2026", True, 4, True),
+    ("ESL Pro League S21", True, 4, False),
+    ("BLAST Premier Spring Finals 2025", True, 4, True),
+    ("BLAST Premier Fall Finals 2025", True, 4, True),
+    ("IEM Dallas 2025", True, 4, False),
+    ("PGL Masters Bucharest 2025", True, 4, True),
     # Tier 3 — Medium LAN
     ("Thunderpick World Championship", True, 3, False),
     ("BetBoom Dacha", True, 3, False),
     ("YaLLa Compass", True, 3, False),
     ("Elisa Masters Espoo", True, 3, False),
-    ("BLAST.tv Paris Major RMR", True, 3, True),
+    ("BLAST Bounty Winter 2026", True, 3, False),
     # Tier 2 — Online / small events
     ("CCT Online Finals", False, 2, False),
     ("ESL Challenger", False, 2, False),
