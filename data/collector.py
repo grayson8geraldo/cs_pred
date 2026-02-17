@@ -11,7 +11,7 @@ from config.settings import PANDASCORE_BASE, PANDASCORE_TOKEN
 logger = logging.getLogger(__name__)
 
 
-def _api_get(endpoint, params=None, retries=3, delay=2):
+def _api_get(endpoint, params=None, retries=3, delay=2, filter_cs2=True):
     """Make a GET request to the PandaScore API with retries."""
     if not PANDASCORE_TOKEN:
         logger.error(
@@ -28,8 +28,9 @@ def _api_get(endpoint, params=None, retries=3, delay=2):
     }
     if params is None:
         params = {}
-    # Always filter to CS2 only (exclude old CS:GO)
-    params.setdefault("filter[videogame_title]", "cs-2")
+    # Filter to CS2 only where supported (matches, not teams)
+    if filter_cs2:
+        params.setdefault("filter[videogame_title]", "cs-2")
 
     for attempt in range(retries):
         try:
@@ -121,7 +122,7 @@ def fetch_top_teams():
         data = _api_get("/csgo/teams", params={
             "page[size]": 50,
             "page[number]": page,
-        })
+        }, filter_cs2=False)
         if not data:
             break
         all_teams.extend(data)
