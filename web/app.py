@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, render_template, request, jsonify
 from data.database import get_connection, init_db
-from data.collector import collect_all, fetch_matches, store_results, fetch_results
+from data.collector import collect_all
 from models.predictor import get_predictor, CSPredictor
 from models.rating_systems import recalculate_all_ratings
 from models.features import get_feature_names
@@ -214,7 +214,7 @@ def api_stats_overview():
 
 @app.route("/api/data/refresh", methods=["POST"])
 def api_refresh_data():
-    """Trigger data refresh from HLTV."""
+    """Trigger data refresh from PandaScore."""
     try:
         upcoming = collect_all()
         recalculate_all_ratings()

@@ -6,7 +6,7 @@ Usage:
     python run.py              — Start web server
     python run.py seed         — Seed database with sample data
     python run.py train        — Train the ML model
-    python run.py collect      — Collect data from HLTV API
+    python run.py collect      — Collect data from PandaScore API
     python run.py predict      — Quick CLI prediction
 """
 
@@ -62,7 +62,7 @@ def cmd_train():
 
 
 def cmd_collect():
-    """Collect data from HLTV API."""
+    """Collect data from PandaScore API."""
     from data.collector import collect_all
     from models.rating_systems import recalculate_all_ratings
     collect_all()

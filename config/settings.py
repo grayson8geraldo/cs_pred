@@ -2,8 +2,9 @@
 
 import os
 
-# HLTV unofficial API (Vercel)
-HLTV_API_BASE = "https://hltv-api.vercel.app"
+# PandaScore API (free tier: 1000 req/hour)
+PANDASCORE_BASE = "https://api.pandascore.co"
+PANDASCORE_TOKEN = os.environ.get("PANDASCORE_TOKEN", "")
 
 # Data paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

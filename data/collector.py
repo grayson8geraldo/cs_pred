@@ -1,29 +1,48 @@
-"""Data collector: fetches match data from HLTV API and stores in database."""
+"""Data collector: fetches CS2 match data from PandaScore API and stores in database."""
 
 import time
 import logging
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from data.database import get_connection, init_db
-from config.settings import HLTV_API_BASE
+from config.settings import PANDASCORE_BASE, PANDASCORE_TOKEN
 
 logger = logging.getLogger(__name__)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-    "Accept": "application/json",
-}
 
+def _api_get(endpoint, params=None, retries=3, delay=2):
+    """Make a GET request to the PandaScore API with retries."""
+    if not PANDASCORE_TOKEN:
+        logger.error(
+            "PANDASCORE_TOKEN not set. "
+            "Register at https://pandascore.co and set the env var: "
+            "export PANDASCORE_TOKEN=your_token_here"
+        )
+        return None
 
-def _api_get(endpoint, retries=3, delay=2):
-    """Make a GET request to the HLTV API with retries."""
-    url = f"{HLTV_API_BASE}{endpoint}"
+    url = f"{PANDASCORE_BASE}{endpoint}"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {PANDASCORE_TOKEN}",
+    }
+    if params is None:
+        params = {}
+    # Always filter to CS2 only (exclude old CS:GO)
+    params.setdefault("filter[videogame_title]", "cs-2")
+
     for attempt in range(retries):
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=15)
+            resp = requests.get(url, headers=headers, params=params, timeout=15)
             if resp.status_code == 200:
                 return resp.json()
+            if resp.status_code == 401:
+                logger.error("PandaScore auth failed — check PANDASCORE_TOKEN")
+                return None
+            if resp.status_code == 429:
+                logger.warning("Rate limited, waiting %ds...", delay * (attempt + 2))
+                time.sleep(delay * (attempt + 2))
+                continue
             logger.warning("API %s returned %d", url, resp.status_code)
         except requests.RequestException as e:
             logger.warning("API request failed (attempt %d): %s", attempt + 1, e)
@@ -31,7 +50,7 @@ def _api_get(endpoint, retries=3, delay=2):
     return None
 
 
-def _get_or_create_team(conn, name, hltv_id=None):
+def _get_or_create_team(conn, name, pandascore_id=None):
     """Get team ID by name, or create if doesn't exist."""
     row = conn.execute(
         "SELECT id FROM teams WHERE name = ?", (name,)
@@ -40,85 +59,137 @@ def _get_or_create_team(conn, name, hltv_id=None):
         return row["id"]
     cursor = conn.execute(
         "INSERT INTO teams (name, hltv_id) VALUES (?, ?)",
-        (name, hltv_id),
+        (name, pandascore_id),
     )
     conn.commit()
     return cursor.lastrowid
 
 
-def fetch_results():
-    """Fetch recent match results from HLTV API."""
-    data = _api_get("/api/results")
-    if not data:
-        logger.error("Failed to fetch results")
-        return []
-    return data
+def _parse_opponents(match):
+    """Extract team1 and team2 names and IDs from PandaScore match data."""
+    opponents = match.get("opponents", [])
+    if len(opponents) < 2:
+        return None, None, None, None
+    t1 = opponents[0].get("opponent", {})
+    t2 = opponents[1].get("opponent", {})
+    return t1.get("name"), t1.get("id"), t2.get("name"), t2.get("id")
+
+
+def _parse_scores(match):
+    """Extract team scores from PandaScore results array."""
+    results = match.get("results", [])
+    if len(results) >= 2:
+        return results[0].get("score", 0), results[1].get("score", 0)
+    return 0, 0
+
+
+def fetch_results(page_size=100, pages=3):
+    """Fetch recent finished CS2 matches from PandaScore."""
+    all_matches = []
+    for page in range(1, pages + 1):
+        data = _api_get("/csgo/matches/past", params={
+            "page[size]": page_size,
+            "page[number]": page,
+            "sort": "-begin_at",
+        })
+        if not data:
+            break
+        all_matches.extend(data)
+        if len(data) < page_size:
+            break
+    logger.info("Fetched %d finished matches from PandaScore", len(all_matches))
+    return all_matches
 
 
 def fetch_matches():
-    """Fetch upcoming matches from HLTV API."""
-    data = _api_get("/api/matches")
+    """Fetch upcoming CS2 matches from PandaScore."""
+    data = _api_get("/csgo/matches/upcoming", params={
+        "page[size]": 50,
+        "sort": "begin_at",
+    })
     if not data:
         logger.error("Failed to fetch upcoming matches")
         return []
+    logger.info("Fetched %d upcoming matches from PandaScore", len(data))
     return data
 
 
 def fetch_top_teams():
-    """Fetch HLTV top teams ranking."""
-    data = _api_get("/api/ranking")
-    if not data:
-        logger.error("Failed to fetch top teams")
-        return []
-    return data
+    """Fetch CS2 teams from PandaScore, sorted to approximate rankings."""
+    all_teams = []
+    for page in range(1, 3):
+        data = _api_get("/csgo/teams", params={
+            "page[size]": 50,
+            "page[number]": page,
+        })
+        if not data:
+            break
+        all_teams.extend(data)
+        if len(data) < 50:
+            break
+    logger.info("Fetched %d teams from PandaScore", len(all_teams))
+    return all_teams
 
 
 def store_results(results):
-    """Parse and store match results in the database."""
+    """Parse and store PandaScore match results in the database."""
     conn = get_connection()
     stored = 0
     for match in results:
         try:
-            team1_name = match.get("team1", {}).get("name") if isinstance(match.get("team1"), dict) else match.get("team1")
-            team2_name = match.get("team2", {}).get("name") if isinstance(match.get("team2"), dict) else match.get("team2")
+            team1_name, t1_ps_id, team2_name, t2_ps_id = _parse_opponents(match)
             if not team1_name or not team2_name:
                 continue
 
-            team1_id = _get_or_create_team(conn, team1_name)
-            team2_id = _get_or_create_team(conn, team2_name)
+            team1_id = _get_or_create_team(conn, team1_name, t1_ps_id)
+            team2_id = _get_or_create_team(conn, team2_name, t2_ps_id)
 
-            # Parse scores
-            result_text = match.get("result", "")
-            team1_score, team2_score = 0, 0
-            if isinstance(result_text, str) and " - " in result_text:
-                parts = result_text.split(" - ")
-                try:
-                    team1_score = int(parts[0].strip())
-                    team2_score = int(parts[1].strip())
-                except (ValueError, IndexError):
-                    pass
+            team1_score, team2_score = _parse_scores(match)
 
-            winner_id = team1_id if team1_score > team2_score else team2_id
+            # Determine winner
+            winner_ps_id = match.get("winner_id")
+            winner = match.get("winner") or {}
+            if winner_ps_id and winner_ps_id == t1_ps_id:
+                winner_id = team1_id
+            elif winner_ps_id and winner_ps_id == t2_ps_id:
+                winner_id = team2_id
+            elif team1_score > team2_score:
+                winner_id = team1_id
+            elif team2_score > team1_score:
+                winner_id = team2_id
+            else:
+                winner_id = None
 
-            # Match date
-            match_date = match.get("date")
-            if isinstance(match_date, (int, float)):
-                match_date = datetime.fromtimestamp(match_date / 1000).isoformat()
-            elif not match_date:
+            # Match date (ISO-8601)
+            match_date = match.get("begin_at") or match.get("scheduled_at")
+            if not match_date:
                 match_date = datetime.utcnow().isoformat()
 
-            event_name = match.get("event", {}).get("name") if isinstance(match.get("event"), dict) else match.get("event", "")
+            # Event / tournament info
+            tournament = match.get("tournament") or {}
+            league = match.get("league") or {}
+            event_name = tournament.get("name") or league.get("name") or ""
+            if league.get("name") and tournament.get("name"):
+                event_name = f"{league['name']}: {tournament['name']}"
 
-            hltv_id = match.get("matchId") or match.get("id")
+            # Best-of format
+            best_of = match.get("number_of_games", 1) or 1
 
-            # Insert match
+            # Map info from games
+            map_name = None
+            games = match.get("games") or []
+            if len(games) == 1 and games[0].get("map", {}).get("name"):
+                map_name = games[0]["map"]["name"]
+
+            ps_match_id = match.get("id")
+
             conn.execute("""
                 INSERT OR IGNORE INTO matches
                     (hltv_id, team1_id, team2_id, team1_score, team2_score,
-                     winner_id, event_name, match_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (hltv_id, team1_id, team2_id, team1_score, team2_score,
-                  winner_id, event_name, match_date))
+                     winner_id, event_name, match_date, best_of, map_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (ps_match_id, team1_id, team2_id, team1_score, team2_score,
+                  winner_id, event_name, match_date, best_of, map_name))
             stored += 1
         except Exception as e:
             logger.error("Error storing match: %s", e)
@@ -130,38 +201,56 @@ def store_results(results):
     return stored
 
 
-def store_rankings(rankings):
-    """Store team rankings in the database."""
+def store_rankings(teams):
+    """Store team rankings in the database (approximated from PandaScore team list)."""
     conn = get_connection()
-    for entry in rankings:
+    for rank, entry in enumerate(teams, start=1):
         try:
-            team_name = entry.get("team", {}).get("name") if isinstance(entry.get("team"), dict) else entry.get("team")
+            team_name = entry.get("name")
             if not team_name:
                 continue
-            rank = entry.get("ranking") or entry.get("rank") or entry.get("position")
-            team_id = _get_or_create_team(conn, team_name)
+            ps_id = entry.get("id")
+            location = entry.get("location")
+            image_url = entry.get("image_url")
+
+            team_id = _get_or_create_team(conn, team_name, ps_id)
+
+            updates = ["updated_at = CURRENT_TIMESTAMP"]
+            params = []
+
+            if location:
+                updates.append("country = ?")
+                params.append(location)
+            if image_url:
+                updates.append("logo_url = ?")
+                params.append(image_url)
+
+            updates.append("world_ranking = ?")
+            params.append(rank)
+            params.append(team_id)
+
             conn.execute(
-                "UPDATE teams SET world_ranking = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (rank, team_id),
+                f"UPDATE teams SET {', '.join(updates)} WHERE id = ?",
+                params,
             )
         except Exception as e:
-            logger.error("Error storing ranking: %s", e)
+            logger.error("Error storing team: %s", e)
     conn.commit()
     conn.close()
 
 
 def collect_all():
-    """Run full data collection cycle."""
+    """Run full data collection cycle from PandaScore."""
     init_db()
-    logger.info("Starting data collection...")
+    logger.info("Starting data collection from PandaScore...")
 
     results = fetch_results()
     if results:
         store_results(results)
 
-    rankings = fetch_top_teams()
-    if rankings:
-        store_rankings(rankings)
+    teams = fetch_top_teams()
+    if teams:
+        store_rankings(teams)
 
     upcoming = fetch_matches()
     logger.info("Found %d upcoming matches", len(upcoming))
