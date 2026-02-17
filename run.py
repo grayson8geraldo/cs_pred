@@ -7,7 +7,7 @@ Usage:
     python run.py seed         — Seed database with sample data
     python run.py train        — Train the ML model
     python run.py collect      — Collect data from PandaScore API
-    python run.py reset        — Clear DB and collect fresh real data only
+    python run.py reset        — Clear matches, keep teams/rankings, collect real data
     python run.py predict      — Quick CLI prediction
 """
 
@@ -73,23 +73,49 @@ def cmd_collect():
 
 
 def cmd_reset():
-    """Clear all data and collect fresh from PandaScore API only (no seed data)."""
+    """Clear synthetic matches but keep team data (rankings, players), then collect real matches."""
     from data.database import init_db, get_connection
-    from data.collector import collect_all
+    from scripts.seed_data import seed_teams, seed_players, seed_map_stats
+    from data.collector import fetch_results, store_results, fetch_matches
     from models.rating_systems import recalculate_all_ratings
 
     init_db()
     conn = get_connection()
+
+    # Clear matches, ratings, predictions — but keep teams and players
     for table in ["predictions", "team_map_ratings", "team_ratings",
-                   "map_stats", "matches", "players", "teams"]:
+                   "map_stats", "matches"]:
         conn.execute(f"DELETE FROM {table}")
     conn.commit()
-    conn.close()
-    logger.info("Database cleared. Collecting real data only...")
 
-    collect_all()
+    # Re-seed teams and players if empty (preserves HLTV rankings)
+    team_count = conn.execute("SELECT COUNT(*) as c FROM teams").fetchone()["c"]
+    if team_count == 0:
+        seed_teams(conn)
+        seed_players(conn)
+
+    conn.close()
+    logger.info("Matches cleared. Collecting real match data...")
+
+    # Collect real data only (no seed matches)
+    results = fetch_results()
+    if results:
+        store_results(results)
+
+    # Liquipedia
+    try:
+        from data.liquipedia import collect_liquipedia
+        collect_liquipedia()
+    except Exception as e:
+        logger.warning("Liquipedia collection skipped: %s", e)
+
+    # Recalculate ratings from real matches
     recalculate_all_ratings()
-    logger.info("Fresh data collection complete — real data only, no seed.")
+
+    # Fetch upcoming matches
+    upcoming = fetch_matches()
+    logger.info("Found %d upcoming matches", len(upcoming))
+    logger.info("Reset complete — real matches only, team rankings preserved.")
 
 
 def cmd_predict():
