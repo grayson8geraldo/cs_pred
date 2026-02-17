@@ -9,6 +9,7 @@ import os
 import logging
 import math
 import pickle
+from datetime import datetime
 import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import TimeSeriesSplit
@@ -48,7 +49,7 @@ class CSPredictor:
         conn = get_connection()
         matches = conn.execute("""
             SELECT id, team1_id, team2_id, winner_id, map_name, is_lan,
-                   best_of, event_name, is_playoff
+                   best_of, event_name, is_playoff, match_date
             FROM matches
             WHERE winner_id IS NOT NULL
             ORDER BY match_date ASC
@@ -61,6 +62,14 @@ class CSPredictor:
 
         X, y = [], []
         for match in matches:
+            # Parse match_date to use as temporal reference point,
+            # preventing data leakage from future matches during training
+            match_date = None
+            if match["match_date"]:
+                try:
+                    match_date = datetime.fromisoformat(str(match["match_date"]))
+                except (ValueError, TypeError):
+                    pass
             features = compute_features(
                 match["team1_id"], match["team2_id"],
                 map_name=match["map_name"],
@@ -68,6 +77,7 @@ class CSPredictor:
                 best_of=match["best_of"] or 1,
                 event_name=match["event_name"] or "",
                 is_playoff=bool(match["is_playoff"]),
+                as_of=match_date,
             )
             feature_vector = [features[f] for f in self.feature_names]
             label = 1 if match["winner_id"] == match["team1_id"] else 0
@@ -248,25 +258,33 @@ class CSPredictor:
     def _model_agreement(self, p1, p2, p3):
         probs = [p1, p2, p3]
         winners = [p > 0.5 for p in probs]
+        spread = max(probs) - min(probs)
         if all(winners) or not any(winners):
-            spread = max(probs) - min(probs)
+            # All models agree on winner — high agreement, penalize by spread
             return max(0, 1.0 - spread * 2)
-        return 0.3
+        # Models disagree — scale by how close they are to each other
+        # Near-50/50 disagreement (e.g. 0.49 vs 0.51) should not be heavily penalized
+        std = float(np.std(probs))
+        return max(0.1, 1.0 - std * 6)
 
     def _compute_confidence(self, prob_spread, model_agreement, features):
-        base = min(prob_spread * 1.5, 1.0)
+        # Sigmoid-like scaling: small spreads still produce meaningful confidence
+        # spread=0.1 → ~0.43, spread=0.2 → ~0.60, spread=0.4 → ~0.82
+        base = 1.0 / (1.0 + math.exp(-8 * (prob_spread - 0.15)))
         agreement_factor = 0.7 + 0.3 * model_agreement
         h2h_data = features.get("h2h_matches", 0)
-        data_factor = 0.7 + 0.3 * min(h2h_data, 1.0)
-        return base * agreement_factor * data_factor
+        data_factor = 0.8 + 0.2 * min(h2h_data, 1.0)
+        return min(base * agreement_factor * data_factor, 1.0)
 
     def _heuristic_predict(self, features):
         weights = {
-            "elo_diff": 0.20, "glicko2_diff": 0.15, "ranking_diff": 0.10,
-            "win_rate_30d_diff": 0.12, "win_rate_90d_diff": 0.08,
+            "elo_diff": 0.18, "glicko2_diff": 0.14, "ranking_diff": 0.09,
+            "win_rate_30d_diff": 0.11, "win_rate_90d_diff": 0.07,
             "recent_form_5_diff": 0.08, "h2h_advantage": 0.07,
             "map_wr_diff": 0.05, "player_rating_diff": 0.05,
             "streak_diff": 0.03, "vs_top10_diff": 0.04, "star_player_diff": 0.03,
+            "rest_diff": 0.02, "roster_stability_diff": 0.02,
+            "close_map_resilience_diff": 0.02,
         }
         norm = {}
         divisors = {
@@ -283,6 +301,13 @@ class CSPredictor:
                 val = val * 2
             norm[k] = max(-1, min(1, val))
         score = sum(weights[k] * norm[k] for k in weights)
+        # LAN and playoff increase confidence in the favorite (amplify signal)
+        is_lan = features.get("is_lan", 0)
+        is_playoff = features.get("is_playoff", 0)
+        if is_lan:
+            score *= 1.05  # LAN slightly amplifies skill gaps
+        if is_playoff:
+            score *= 1.08  # Playoff experience matters more
         team1_prob = 1.0 / (1 + math.exp(-5 * score))
         return team1_prob, 1.0 - team1_prob
 

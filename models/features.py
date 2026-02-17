@@ -13,14 +13,19 @@ from config.settings import (
 
 
 def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
-                     best_of=1, event_name="", is_playoff=False):
+                     best_of=1, event_name="", is_playoff=False,
+                     as_of=None):
     """
     Compute 32-feature vector for a match.
     All diff features: positive = advantage for team1.
+
+    as_of: datetime to use as reference point for time-based features.
+           If None, uses current time (for live predictions).
+           Pass the match date during training to avoid temporal leakage.
     """
     conn = get_connection()
     f = {}
-    now = datetime.utcnow()
+    now = as_of if as_of is not None else datetime.utcnow()
 
     # ═══════════════ BLOCK 1: RATING SYSTEMS (4) ═══════════════
     elo1, elo2 = get_team_elo(team1_id), get_team_elo(team2_id)
@@ -43,25 +48,26 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
     f["event_tier"] = tier / 5.0
 
     # ═══════════════ BLOCK 3: WIN RATES — MULTI-WINDOW (5) ═══════════════
+    now_iso = now.isoformat()
     d30 = (now - timedelta(days=30)).isoformat()
     d90 = (now - timedelta(days=90)).isoformat()
 
-    wr1_30 = _get_win_rate(conn, team1_id, since=d30)
-    wr2_30 = _get_win_rate(conn, team2_id, since=d30)
+    wr1_30 = _get_win_rate(conn, team1_id, since=d30, before=now_iso)
+    wr2_30 = _get_win_rate(conn, team2_id, since=d30, before=now_iso)
     f["win_rate_30d_diff"] = wr1_30 - wr2_30
 
-    wr1_90 = _get_win_rate(conn, team1_id, since=d90)
-    wr2_90 = _get_win_rate(conn, team2_id, since=d90)
+    wr1_90 = _get_win_rate(conn, team1_id, since=d90, before=now_iso)
+    wr2_90 = _get_win_rate(conn, team2_id, since=d90, before=now_iso)
     f["win_rate_90d_diff"] = wr1_90 - wr2_90
 
     f["form_trend_diff"] = (wr1_30 - wr1_90) - (wr2_30 - wr2_90)
 
-    form5_1 = _get_weighted_form(conn, team1_id, n=5)
-    form5_2 = _get_weighted_form(conn, team2_id, n=5)
+    form5_1 = _get_weighted_form(conn, team1_id, n=5, before=now_iso)
+    form5_2 = _get_weighted_form(conn, team2_id, n=5, before=now_iso)
     f["recent_form_5_diff"] = form5_1 - form5_2
 
-    form10_1 = _get_weighted_form(conn, team1_id, n=10)
-    form10_2 = _get_weighted_form(conn, team2_id, n=10)
+    form10_1 = _get_weighted_form(conn, team1_id, n=10, before=now_iso)
+    form10_2 = _get_weighted_form(conn, team2_id, n=10, before=now_iso)
     f["recent_form_10_diff"] = form10_1 - form10_2
 
     # ═══════════════ BLOCK 4: HEAD-TO-HEAD (3) ═══════════════
@@ -116,13 +122,13 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
     f["is_playoff"] = 1.0 if is_playoff else 0.0
     f["best_of"] = best_of / 5.0
 
-    rest1 = _days_since_last_match(conn, team1_id)
-    rest2 = _days_since_last_match(conn, team2_id)
+    rest1 = _days_since_last_match(conn, team1_id, now)
+    rest2 = _days_since_last_match(conn, team2_id, now)
     f["rest_diff"] = _rest_factor(rest1) - _rest_factor(rest2)
 
     # ═══════════════ BLOCK 8: MOMENTUM (4) ═══════════════
-    streak1 = _get_win_streak(conn, team1_id)
-    streak2 = _get_win_streak(conn, team2_id)
+    streak1 = _get_win_streak(conn, team1_id, before=now_iso)
+    streak2 = _get_win_streak(conn, team2_id, before=now_iso)
     f["streak_diff"] = streak1 - streak2
 
     mp_all1 = _count_matches(conn, team1_id)
@@ -179,8 +185,17 @@ def _get_event_tier(event_name):
     return EVENT_TIERS["default"]
 
 
-def _get_win_rate(conn, team_id, since=None):
-    if since:
+def _get_win_rate(conn, team_id, since=None, before=None):
+    if since and before:
+        wins = conn.execute(
+            "SELECT COUNT(*) as c FROM matches WHERE winner_id = ? AND match_date >= ? AND match_date < ?",
+            (team_id, since, before),
+        ).fetchone()["c"]
+        total = conn.execute(
+            "SELECT COUNT(*) as c FROM matches WHERE (team1_id = ? OR team2_id = ?) AND match_date >= ? AND match_date < ?",
+            (team_id, team_id, since, before),
+        ).fetchone()["c"]
+    elif since:
         wins = conn.execute(
             "SELECT COUNT(*) as c FROM matches WHERE winner_id = ? AND match_date >= ?",
             (team_id, since),
@@ -188,6 +203,15 @@ def _get_win_rate(conn, team_id, since=None):
         total = conn.execute(
             "SELECT COUNT(*) as c FROM matches WHERE (team1_id = ? OR team2_id = ?) AND match_date >= ?",
             (team_id, team_id, since),
+        ).fetchone()["c"]
+    elif before:
+        wins = conn.execute(
+            "SELECT COUNT(*) as c FROM matches WHERE winner_id = ? AND match_date < ?",
+            (team_id, before),
+        ).fetchone()["c"]
+        total = conn.execute(
+            "SELECT COUNT(*) as c FROM matches WHERE (team1_id = ? OR team2_id = ?) AND match_date < ?",
+            (team_id, team_id, before),
         ).fetchone()["c"]
     else:
         wins = conn.execute(
@@ -200,12 +224,19 @@ def _get_win_rate(conn, team_id, since=None):
     return wins / total if total > 0 else 0.5
 
 
-def _get_weighted_form(conn, team_id, n=10):
-    rows = conn.execute("""
-        SELECT winner_id FROM matches
-        WHERE team1_id = ? OR team2_id = ?
-        ORDER BY match_date DESC LIMIT ?
-    """, (team_id, team_id, n)).fetchall()
+def _get_weighted_form(conn, team_id, n=10, before=None):
+    if before:
+        rows = conn.execute("""
+            SELECT winner_id FROM matches
+            WHERE (team1_id = ? OR team2_id = ?) AND match_date < ?
+            ORDER BY match_date DESC LIMIT ?
+        """, (team_id, team_id, before, n)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT winner_id FROM matches
+            WHERE team1_id = ? OR team2_id = ?
+            ORDER BY match_date DESC LIMIT ?
+        """, (team_id, team_id, n)).fetchall()
     if not rows:
         return 0.5
     total_weight = 0
@@ -349,12 +380,19 @@ def _count_matches(conn, team_id):
     return row["c"]
 
 
-def _get_win_streak(conn, team_id):
-    rows = conn.execute("""
-        SELECT winner_id FROM matches
-        WHERE team1_id = ? OR team2_id = ?
-        ORDER BY match_date DESC LIMIT 20
-    """, (team_id, team_id)).fetchall()
+def _get_win_streak(conn, team_id, before=None):
+    if before:
+        rows = conn.execute("""
+            SELECT winner_id FROM matches
+            WHERE (team1_id = ? OR team2_id = ?) AND match_date < ?
+            ORDER BY match_date DESC LIMIT 20
+        """, (team_id, team_id, before)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT winner_id FROM matches
+            WHERE team1_id = ? OR team2_id = ?
+            ORDER BY match_date DESC LIMIT 20
+        """, (team_id, team_id)).fetchall()
     streak = 0
     for r in rows:
         if r["winner_id"] == team_id:
@@ -364,15 +402,17 @@ def _get_win_streak(conn, team_id):
     return streak
 
 
-def _days_since_last_match(conn, team_id):
+def _days_since_last_match(conn, team_id, now=None):
+    if now is None:
+        now = datetime.utcnow()
     row = conn.execute("""
         SELECT MAX(match_date) as last_date FROM matches
-        WHERE team1_id = ? OR team2_id = ?
-    """, (team_id, team_id)).fetchone()
+        WHERE (team1_id = ? OR team2_id = ?) AND match_date < ?
+    """, (team_id, team_id, now.isoformat())).fetchone()
     if row and row["last_date"]:
         try:
             last = datetime.fromisoformat(str(row["last_date"]))
-            return (datetime.utcnow() - last).days
+            return (now - last).days
         except (ValueError, TypeError):
             pass
     return 30

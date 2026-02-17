@@ -312,7 +312,7 @@ TEAM_PLAYERS = {
 # CS2 MAP POOL
 # ═══════════════════════════════════════════════════════════════
 
-MAPS = ["Mirage", "Inferno", "Nuke", "Ancient", "Anubis", "Dust2", "Overpass"]
+MAPS = ["Mirage", "Inferno", "Nuke", "Ancient", "Anubis", "Dust2", "Overpass", "Vertigo", "Train"]
 
 # ═══════════════════════════════════════════════════════════════
 # MAP STRENGTHS: team → {map: adjustment}
