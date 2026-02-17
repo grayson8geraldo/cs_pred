@@ -4,7 +4,7 @@ import os
 
 # PandaScore API (free tier: 1000 req/hour)
 PANDASCORE_BASE = "https://api.pandascore.co"
-PANDASCORE_TOKEN = os.environ.get("PANDASCORE_TOKEN", "")
+PANDASCORE_TOKEN = os.environ.get("PANDASCORE_TOKEN", "u_kwjA6YhIWSlD5QD1i8zDF0ySW60pa9451Tk0ZSTRKQRgtwD6w")
 
 # Data paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
