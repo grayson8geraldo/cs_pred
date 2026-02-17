@@ -93,14 +93,15 @@ class CSPredictor:
 
         # Base models
         xgb_model = xgb.XGBClassifier(
-            n_estimators=300, max_depth=5, learning_rate=0.03,
-            subsample=0.8, colsample_bytree=0.7, min_child_weight=5,
-            reg_alpha=0.5, reg_lambda=2.0, gamma=0.1,
+            n_estimators=300, max_depth=4, learning_rate=0.03,
+            subsample=0.75, colsample_bytree=0.6, min_child_weight=10,
+            reg_alpha=1.0, reg_lambda=5.0, gamma=0.3,
+            max_delta_step=1,
             eval_metric="logloss", random_state=42,
         )
         gbt_model = GradientBoostingClassifier(
-            n_estimators=200, max_depth=4, learning_rate=0.05,
-            subsample=0.8, min_samples_leaf=10, max_features=0.7,
+            n_estimators=200, max_depth=3, learning_rate=0.05,
+            subsample=0.75, min_samples_leaf=15, max_features=0.6,
             random_state=42,
         )
         lr_model = LogisticRegression(
@@ -198,6 +199,9 @@ class CSPredictor:
             p_lr = float(self.model["lr"].predict_proba(fv_s)[0][1])
 
             team1_prob = 0.45 * p_xgb + 0.35 * p_gbt + 0.20 * p_lr
+            # Clip to prevent unrealistic extreme probabilities
+            # Even the best team can lose to the worst on any given day
+            team1_prob = max(0.03, min(0.97, team1_prob))
             team2_prob = 1.0 - team1_prob
             method = "ensemble"
             model_agreement = self._model_agreement(p_xgb, p_gbt, p_lr)

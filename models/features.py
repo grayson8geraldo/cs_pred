@@ -72,9 +72,15 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
 
     # ═══════════════ BLOCK 4: HEAD-TO-HEAD (3) ═══════════════
     h2h_wr, h2h_count = _get_h2h_detailed(conn, team1_id, team2_id)
-    f["h2h_advantage"] = h2h_wr
     f["h2h_matches"] = min(h2h_count / 10.0, 1.0)
-    f["h2h_recent"] = _get_h2h_recent(conn, team1_id, team2_id, n=5)
+    # Only trust H2H signal when we have enough matches to be meaningful.
+    # With < 5 H2H matches, the signal is too noisy to be useful.
+    if h2h_count >= 5:
+        f["h2h_advantage"] = h2h_wr
+        f["h2h_recent"] = _get_h2h_recent(conn, team1_id, team2_id, n=5)
+    else:
+        f["h2h_advantage"] = 0.5
+        f["h2h_recent"] = 0.5
 
     # ═══════════════ BLOCK 5: MAP ANALYSIS (5) ═══════════════
     if map_name:
@@ -257,7 +263,13 @@ def _get_h2h_detailed(conn, team1_id, team2_id):
     if not rows:
         return 0.5, 0
     wins = sum(1 for r in rows if r["winner_id"] == team1_id)
-    return wins / len(rows), len(rows)
+    n = len(rows)
+    raw_rate = wins / n
+    # Reliability scaling: only trust H2H that deviates from 0.5
+    # when we have enough matches to be statistically meaningful.
+    # 3 matches → reliability 0.2, 10 matches → 0.67, 15+ → 1.0
+    reliability = min(n / 15.0, 1.0)
+    return 0.5 + (raw_rate - 0.5) * reliability, n
 
 
 def _get_h2h_recent(conn, team1_id, team2_id, n=5):
@@ -275,7 +287,11 @@ def _get_h2h_recent(conn, team1_id, team2_id, n=5):
         total_weight += weight
         if r["winner_id"] == team1_id:
             weighted_wins += weight
-    return weighted_wins / total_weight
+    raw = weighted_wins / total_weight
+    # Reliability scaling consistent with _get_h2h_detailed
+    match_count = len(rows)
+    reliability = min(match_count / 10.0, 1.0)
+    return 0.5 + (raw - 0.5) * reliability
 
 
 def _get_map_win_rate(conn, team_id, map_name):

@@ -495,9 +495,13 @@ def generate_matches(conn, num_matches=1500):
         map_adj1 = MAP_STRENGTHS.get(t1_name, {}).get(map_name, 0)
         map_adj2 = MAP_STRENGTHS.get(t2_name, {}).get(map_name, 0)
 
-        effective_s1 = s1 + map_adj1 + random.gauss(0, 0.10)
-        effective_s2 = s2 + map_adj2 + random.gauss(0, 0.10)
-        team1_wins = effective_s1 > effective_s2
+        # Probabilistic outcome based on strength difference.
+        # Uses sigmoid so stronger teams win consistently, but upsets happen.
+        # diff=0.01 → 53%, diff=0.10 → 73%, diff=0.20 → 88%, diff=0.38 → 98%
+        import math
+        strength_diff = (s1 + map_adj1) - (s2 + map_adj2)
+        win_prob = 1.0 / (1.0 + math.exp(-10 * strength_diff))
+        team1_wins = random.random() < win_prob
         winner_id = t1_id if team1_wins else t2_id
 
         # Pick appropriate event based on team tier
