@@ -84,10 +84,15 @@ def _parse_scores(match):
     return 0, 0
 
 
-def fetch_results(page_size=100, pages=3):
-    """Fetch recent finished CS2 matches from PandaScore."""
+def fetch_results(page_size=100, pages=15):
+    """Fetch recent finished CS2 matches from PandaScore.
+
+    Default: 15 pages x 100 = up to 1500 matches.
+    PandaScore free tier allows 1000 requests/hour, so this is safe.
+    """
     all_matches = []
     for page in range(1, pages + 1):
+        logger.info("Fetching PandaScore results page %d/%d...", page, pages)
         data = _api_get("/csgo/matches/past", params={
             "page[size]": page_size,
             "page[number]": page,
@@ -98,6 +103,8 @@ def fetch_results(page_size=100, pages=3):
         all_matches.extend(data)
         if len(data) < page_size:
             break
+        # Small delay to be polite to API
+        time.sleep(0.3)
     logger.info("Fetched %d finished matches from PandaScore", len(all_matches))
     return all_matches
 
@@ -241,18 +248,29 @@ def store_rankings(teams):
 
 
 def collect_all():
-    """Run full data collection cycle from PandaScore."""
+    """Run full data collection cycle from PandaScore + Liquipedia."""
     init_db()
-    logger.info("Starting data collection from PandaScore...")
 
+    # 1. PandaScore: match results
+    logger.info("Starting data collection from PandaScore...")
     results = fetch_results()
     if results:
         store_results(results)
 
+    # 2. PandaScore: team rankings
     teams = fetch_top_teams()
     if teams:
         store_rankings(teams)
 
+    # 3. Liquipedia: additional match history
+    try:
+        from data.liquipedia import collect_liquipedia
+        logger.info("Collecting additional data from Liquipedia...")
+        collect_liquipedia()
+    except Exception as e:
+        logger.warning("Liquipedia collection failed (non-critical): %s", e)
+
+    # 4. Upcoming matches
     upcoming = fetch_matches()
     logger.info("Found %d upcoming matches", len(upcoming))
     return upcoming
