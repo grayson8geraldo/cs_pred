@@ -54,5 +54,5 @@ EVENT_TIERS = {
 
 # Flask
 FLASK_HOST = "0.0.0.0"
-FLASK_PORT = 8080
+FLASK_PORT = 5000
 SECRET_KEY = os.environ.get("SECRET_KEY", "cs-pred-dev-key-change-in-production")
