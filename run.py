@@ -7,6 +7,7 @@ Usage:
     python run.py seed         — Seed database with sample data
     python run.py train        — Train the ML model
     python run.py collect      — Collect data from PandaScore API
+    python run.py reset        — Clear DB and collect fresh real data only
     python run.py predict      — Quick CLI prediction
 """
 
@@ -71,6 +72,26 @@ def cmd_collect():
     logger.info("Data collection and rating recalculation complete.")
 
 
+def cmd_reset():
+    """Clear all data and collect fresh from PandaScore API only (no seed data)."""
+    from data.database import init_db, get_connection
+    from data.collector import collect_all
+    from models.rating_systems import recalculate_all_ratings
+
+    init_db()
+    conn = get_connection()
+    for table in ["predictions", "team_map_ratings", "team_ratings",
+                   "map_stats", "matches", "players", "teams"]:
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()
+    conn.close()
+    logger.info("Database cleared. Collecting real data only...")
+
+    collect_all()
+    recalculate_all_ratings()
+    logger.info("Fresh data collection complete — real data only, no seed.")
+
+
 def cmd_predict():
     """Interactive CLI prediction."""
     from data.database import init_db, get_connection
@@ -127,6 +148,7 @@ def main():
         "seed": cmd_seed,
         "train": cmd_train,
         "collect": cmd_collect,
+        "reset": cmd_reset,
         "predict": cmd_predict,
     }
 
