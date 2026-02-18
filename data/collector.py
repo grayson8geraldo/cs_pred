@@ -210,9 +210,14 @@ def store_results(results):
 
 
 def store_rankings(teams):
-    """Store team rankings in the database (approximated from PandaScore team list)."""
+    """Store team metadata from PandaScore (logo, country).
+
+    NOTE: Does NOT overwrite world_ranking if it already exists,
+    since PandaScore rankings are approximated and less accurate
+    than HLTV rankings (set by seed_data or HLTV collector).
+    """
     conn = get_connection()
-    for rank, entry in enumerate(teams, start=1):
+    for entry in teams:
         try:
             team_name = entry.get("name")
             if not team_name:
@@ -227,14 +232,14 @@ def store_rankings(teams):
             params = []
 
             if location:
-                updates.append("country = ?")
+                updates.append("country = COALESCE(country, ?)")
                 params.append(location)
             if image_url:
                 updates.append("logo_url = ?")
                 params.append(image_url)
 
-            updates.append("world_ranking = ?")
-            params.append(rank)
+            # Only set ranking if team has none (don't overwrite HLTV data)
+            # PandaScore order is NOT the same as HLTV world ranking
             params.append(team_id)
 
             conn.execute(
@@ -248,31 +253,38 @@ def store_rankings(teams):
 
 
 def collect_all():
-    """Run full data collection cycle from PandaScore + Liquipedia."""
+    """Run full data collection: HLTV (optional) + PandaScore + Liquipedia."""
     init_db()
 
-    # 1. PandaScore: match results
-    logger.info("Starting data collection from PandaScore...")
+    # 1. Try HLTV for live rankings (may fail due to Cloudflare)
+    try:
+        from data.hltv import collect_hltv_rankings, collect_hltv_results
+        logger.info("=== HLTV: Fetching real world rankings ===")
+        collect_hltv_rankings()
+
+        logger.info("=== HLTV: Fetching recent match results ===")
+        collect_hltv_results(days=7, max_results=50)
+    except Exception as e:
+        logger.info("HLTV unavailable — using existing rankings: %s", e)
+
+    # 2. PandaScore: match results (large historical dataset — main source)
+    logger.info("=== PandaScore: Fetching match history ===")
     results = fetch_results()
     if results:
         store_results(results)
 
-    # 2. PandaScore: team rankings
-    teams = fetch_top_teams()
-    if teams:
-        store_rankings(teams)
-
     # 3. Liquipedia: additional match history
     try:
         from data.liquipedia import collect_liquipedia
-        logger.info("Collecting additional data from Liquipedia...")
+        logger.info("=== Liquipedia: Fetching tournament results ===")
         collect_liquipedia()
     except Exception as e:
         logger.warning("Liquipedia collection failed (non-critical): %s", e)
 
-    # 4. Upcoming matches
+    # 4. Upcoming matches (PandaScore — structured data)
     upcoming = fetch_matches()
-    logger.info("Found %d upcoming matches", len(upcoming))
+    logger.info("Found %d upcoming matches from PandaScore", len(upcoming))
+
     return upcoming
 
 

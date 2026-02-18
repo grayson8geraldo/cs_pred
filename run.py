@@ -6,8 +6,8 @@ Usage:
     python run.py              — Start web server
     python run.py seed         — Seed database with sample data
     python run.py train        — Train the ML model
-    python run.py collect      — Collect data from PandaScore API
-    python run.py reset        — Clear matches, keep teams/rankings, collect real data
+    python run.py collect      — Collect data from HLTV + PandaScore + Liquipedia
+    python run.py reset        — Full reset: clear DB, rebuild from real data only
     python run.py predict      — Quick CLI prediction
 """
 
@@ -64,7 +64,7 @@ def cmd_train():
 
 
 def cmd_collect():
-    """Collect data from PandaScore API."""
+    """Collect data from all sources (HLTV + PandaScore + Liquipedia)."""
     from data.collector import collect_all
     from models.rating_systems import recalculate_all_ratings
     collect_all()
@@ -73,11 +73,11 @@ def cmd_collect():
 
 
 def cmd_reset():
-    """Clear synthetic matches but keep team data (rankings, players), then collect real matches."""
+    """Clear synthetic matches, keep team rankings, collect real match data only."""
     from data.database import init_db, get_connection
-    from scripts.seed_data import seed_teams, seed_players, seed_map_stats
-    from data.collector import fetch_results, store_results, fetch_matches
+    from scripts.seed_data import seed_teams, seed_players
     from models.rating_systems import recalculate_all_ratings
+    from config.settings import MODEL_PATH, FEATURE_COLUMNS_PATH
 
     init_db()
     conn = get_connection()
@@ -88,34 +88,60 @@ def cmd_reset():
         conn.execute(f"DELETE FROM {table}")
     conn.commit()
 
-    # Re-seed teams and players if empty (preserves HLTV rankings)
+    # Ensure teams with HLTV rankings exist (seed_data has accurate Feb 2026 HLTV rankings)
     team_count = conn.execute("SELECT COUNT(*) as c FROM teams").fetchone()["c"]
     if team_count == 0:
         seed_teams(conn)
         seed_players(conn)
-
+        logger.info("Seeded %d teams with HLTV rankings", team_count)
     conn.close()
-    logger.info("Matches cleared. Collecting real match data...")
 
-    # Collect real data only (no seed matches)
+    # Delete old trained model (was trained on seed/fake data)
+    for path in [MODEL_PATH, FEATURE_COLUMNS_PATH]:
+        if os.path.exists(path):
+            os.remove(path)
+            logger.info("Removed old model: %s", path)
+    calibrator_path = MODEL_PATH.replace("ensemble_model.pkl", "calibrator.pkl")
+    if os.path.exists(calibrator_path):
+        os.remove(calibrator_path)
+
+    # Try HLTV for live rankings update
+    try:
+        from data.hltv import collect_hltv_rankings
+        logger.info("=== Step 1: Updating rankings from HLTV ===")
+        collect_hltv_rankings()
+    except Exception as e:
+        logger.info("HLTV unavailable (Cloudflare) — using seed rankings: %s", e)
+
+    # Collect real match data from PandaScore
+    logger.info("=== Step 2: Fetching PandaScore match history ===")
+    from data.collector import fetch_results, store_results, fetch_matches
     results = fetch_results()
     if results:
         store_results(results)
 
-    # Liquipedia
+    # Liquipedia: tournament results
     try:
         from data.liquipedia import collect_liquipedia
+        logger.info("=== Step 3: Fetching Liquipedia results ===")
         collect_liquipedia()
     except Exception as e:
         logger.warning("Liquipedia collection skipped: %s", e)
 
-    # Recalculate ratings from real matches
+    # Recalculate ratings from real matches only
+    logger.info("=== Step 4: Recalculating ratings ===")
     recalculate_all_ratings()
 
-    # Fetch upcoming matches
-    upcoming = fetch_matches()
-    logger.info("Found %d upcoming matches", len(upcoming))
-    logger.info("Reset complete — real matches only, team rankings preserved.")
+    # Summary
+    conn = get_connection()
+    team_count = conn.execute("SELECT COUNT(*) as c FROM teams").fetchone()["c"]
+    match_count = conn.execute("SELECT COUNT(*) as c FROM matches").fetchone()["c"]
+    ranked = conn.execute("SELECT COUNT(*) as c FROM teams WHERE world_ranking IS NOT NULL").fetchone()["c"]
+    conn.close()
+
+    logger.info("=== Reset complete ===")
+    logger.info("  Teams: %d (%d with HLTV ranking)", team_count, ranked)
+    logger.info("  Matches: %d (all real data, zero synthetic)", match_count)
 
 
 def cmd_predict():
