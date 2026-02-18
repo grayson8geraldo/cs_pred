@@ -18,13 +18,21 @@ from data.database import get_connection, init_db
 logger = logging.getLogger(__name__)
 
 
+PROXY_LIST = [
+    "http://1VK5EH1v:qMDgFWAC@172.120.117.203:63450",
+    "http://1VK5EH1v:qMDgFWAC@172.120.20.248:62736",
+    "http://1VK5EH1v:qMDgFWAC@185.202.107.196:62726",
+]
+
+
 def _get_hltv_client():
-    """Create an HLTV client with safe defaults."""
+    """Create an HLTV client with proxy rotation."""
     from hltv_async_api import Hltv
     return Hltv(
         max_delay=15,
         timeout=30,
-        max_retries=5,
+        max_retries=10,
+        proxy_list=PROXY_LIST,
         debug=False,
         tz="UTC",
     )
