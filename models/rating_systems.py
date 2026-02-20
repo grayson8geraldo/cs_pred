@@ -34,6 +34,9 @@ def _get_time_decay_k(match_date=None):
             match_date = datetime.fromisoformat(match_date)
         except (ValueError, TypeError):
             return ELO_K_FACTOR
+    # Strip timezone info to avoid naive vs aware comparison
+    if hasattr(match_date, 'tzinfo') and match_date.tzinfo is not None:
+        match_date = match_date.replace(tzinfo=None)
     age_days = (now - match_date).days
     if age_days <= 30:
         return ELO_K_FACTOR_RECENT
