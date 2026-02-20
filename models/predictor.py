@@ -18,6 +18,7 @@ from datetime import datetime
 from collections import defaultdict
 
 import numpy as np
+import pandas as pd
 import xgboost as xgb
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import LogisticRegression
@@ -170,8 +171,8 @@ class CSPredictor:
             base_preds = [p_xgb, p_gbt, p_lr]
 
             if lgbm_model is not None:
-                lgbm_model.fit(X_tr, y_tr)
-                p_lgbm = lgbm_model.predict_proba(X_te)[:, 1]
+                lgbm_model.fit(pd.DataFrame(X_tr, columns=self.feature_names), y_tr)
+                p_lgbm = lgbm_model.predict_proba(pd.DataFrame(X_te, columns=self.feature_names))[:, 1]
                 base_preds.append(p_lgbm)
 
             stacked = np.column_stack(base_preds)
@@ -223,7 +224,7 @@ class CSPredictor:
         lr_model.fit(X_scaled, y)
         models_dict = {"xgb": xgb_model, "gbt": gbt_model, "lr": lr_model}
         if lgbm_model is not None:
-            lgbm_model.fit(X, y)
+            lgbm_model.fit(pd.DataFrame(X, columns=self.feature_names), y)
             models_dict["lgbm"] = lgbm_model
 
         # Save everything
@@ -384,10 +385,11 @@ class CSPredictor:
                     "num_leaves": trial.suggest_int("num_leaves", 15, 63),
                 }
                 briers = []
+                X_df = pd.DataFrame(X, columns=self.feature_names)
                 for train_idx, test_idx in tscv.split(X):
                     m = lgbm.LGBMClassifier(**params, random_state=42, verbose=-1)
-                    m.fit(X[train_idx], y[train_idx])
-                    p = m.predict_proba(X[test_idx])[:, 1]
+                    m.fit(X_df.iloc[train_idx], y[train_idx])
+                    p = m.predict_proba(X_df.iloc[test_idx])[:, 1]
                     briers.append(brier_score_loss(y[test_idx], p))
                 return np.mean(briers)
 
@@ -450,7 +452,8 @@ class CSPredictor:
             base_preds = [p_xgb, p_gbt, p_lr]
 
             if "lgbm" in self.model:
-                p_lgbm = float(self.model["lgbm"].predict_proba(fv)[0][1])
+                fv_df = pd.DataFrame(fv, columns=self.feature_names)
+                p_lgbm = float(self.model["lgbm"].predict_proba(fv_df)[0][1])
                 model_probs["lightgbm"] = p_lgbm
                 base_preds.append(p_lgbm)
 
@@ -654,7 +657,8 @@ class CSPredictor:
                 )[0][1]),
             ]
             if "lgbm" in self.model:
-                base_preds.append(float(self.model["lgbm"].predict_proba(fv)[0][1]))
+                fv_df = pd.DataFrame(fv, columns=self.feature_names)
+                base_preds.append(float(self.model["lgbm"].predict_proba(fv_df)[0][1]))
 
             if self.meta_learner is not None:
                 stacked = np.array(base_preds).reshape(1, -1)
@@ -743,8 +747,9 @@ class CSPredictor:
                     lr_m.predict_proba(X_scaled[test_idx])[:, 1],
                 ]
                 if lgbm_m is not None:
-                    lgbm_m.fit(X[train_idx], y[train_idx])
-                    preds.append(lgbm_m.predict_proba(X[test_idx])[:, 1])
+                    X_df = pd.DataFrame(X, columns=self.feature_names)
+                    lgbm_m.fit(X_df.iloc[train_idx], y[train_idx])
+                    preds.append(lgbm_m.predict_proba(X_df.iloc[test_idx])[:, 1])
                 all_probs[test_idx] = np.mean(preds, axis=0)
                 all_mask[test_idx] = True
 
