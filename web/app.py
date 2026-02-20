@@ -4,6 +4,7 @@ import json
 import logging
 import sys
 import os
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -13,6 +14,7 @@ from data.collector import collect_all
 from models.predictor import get_predictor, CSPredictor
 from models.rating_systems import recalculate_all_ratings
 from models.features import get_feature_names
+from config.settings import DATA_REFRESH_INTERVAL, PREDICTION_CACHE_TTL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,6 +25,10 @@ app = Flask(
     static_folder=os.path.join(os.path.dirname(__file__), "static"),
 )
 app.config["SECRET_KEY"] = "cs-pred-dev"
+
+# Simple in-memory prediction cache
+_pred_cache = {}
+_pred_cache_ts = {}
 
 
 # ──────────────────────── Pages ────────────────────────
@@ -66,13 +72,21 @@ def api_predict():
     if not team1_id or not team2_id:
         return jsonify({"error": "team1_id and team2_id are required"}), 400
 
-    predictor = get_predictor()
-    result = predictor.predict(
-        int(team1_id), int(team2_id), map_name=map_name, is_lan=is_lan,
-        best_of=int(best_of), event_name=event_name, is_playoff=is_playoff,
-        bookmaker_odds_t1=float(odds_t1) if odds_t1 else None,
-        bookmaker_odds_t2=float(odds_t2) if odds_t2 else None,
-    )
+    # Check prediction cache
+    cache_key = f"{team1_id}:{team2_id}:{map_name}:{best_of}:{is_lan}:{event_name}"
+    now = time.time()
+    if cache_key in _pred_cache and (now - _pred_cache_ts.get(cache_key, 0)) < PREDICTION_CACHE_TTL:
+        result = _pred_cache[cache_key]
+    else:
+        predictor = get_predictor()
+        result = predictor.predict(
+            int(team1_id), int(team2_id), map_name=map_name, is_lan=is_lan,
+            best_of=int(best_of), event_name=event_name, is_playoff=is_playoff,
+            bookmaker_odds_t1=float(odds_t1) if odds_t1 else None,
+            bookmaker_odds_t2=float(odds_t2) if odds_t2 else None,
+        )
+        _pred_cache[cache_key] = result
+        _pred_cache_ts[cache_key] = now
 
     # Store prediction
     conn = get_connection()
@@ -178,7 +192,6 @@ def api_stats_overview():
     total_teams = conn.execute("SELECT COUNT(*) as c FROM teams").fetchone()["c"]
     total_predictions = conn.execute("SELECT COUNT(*) as c FROM predictions").fetchone()["c"]
 
-    # Model accuracy (if we have verified predictions)
     correct = conn.execute("""
         SELECT COUNT(*) as c FROM predictions
         WHERE actual_winner_id IS NOT NULL AND predicted_winner_id = actual_winner_id
@@ -189,7 +202,6 @@ def api_stats_overview():
 
     accuracy = (correct / verified * 100) if verified > 0 else None
 
-    # Top teams by Elo
     top_teams = conn.execute("""
         SELECT t.name, tr.rating
         FROM team_ratings tr
@@ -212,12 +224,29 @@ def api_stats_overview():
     })
 
 
+@app.route("/api/evaluate", methods=["POST"])
+def api_evaluate():
+    """Run full model evaluation with reliability diagram and tier breakdown."""
+    try:
+        predictor = get_predictor()
+        result = predictor.evaluate()
+        if result:
+            return jsonify({"status": "ok", **result})
+        return jsonify({"status": "error", "message": "Not enough data for evaluation"}), 400
+    except Exception as e:
+        logger.error("Evaluation failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/data/refresh", methods=["POST"])
 def api_refresh_data():
     """Trigger data refresh from PandaScore."""
     try:
         upcoming = collect_all()
         recalculate_all_ratings()
+        # Clear prediction cache after data refresh
+        _pred_cache.clear()
+        _pred_cache_ts.clear()
         return jsonify({
             "status": "ok",
             "upcoming_matches": len(upcoming) if upcoming else 0,
@@ -231,9 +260,13 @@ def api_refresh_data():
 def api_train_model():
     """Trigger model training."""
     try:
+        use_optuna = request.json.get("use_optuna", False) if request.json else False
         predictor = get_predictor()
-        result = predictor.train()
+        result = predictor.train(use_optuna=use_optuna)
         if result:
+            # Clear prediction cache after retraining
+            _pred_cache.clear()
+            _pred_cache_ts.clear()
             return jsonify({"status": "ok", **result})
         return jsonify({"status": "error", "message": "Not enough data to train"}), 400
     except Exception as e:
@@ -241,10 +274,43 @@ def api_train_model():
         return jsonify({"error": str(e)}), 500
 
 
+# ──────────────────────── Auto-refresh scheduler ────────────────────────
+
+def setup_scheduler(app):
+    """Set up background data refresh scheduler."""
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        scheduler = BackgroundScheduler()
+
+        def scheduled_refresh():
+            with app.app_context():
+                try:
+                    collect_all()
+                    recalculate_all_ratings()
+                    _pred_cache.clear()
+                    _pred_cache_ts.clear()
+                    logger.info("Scheduled data refresh complete")
+                except Exception as e:
+                    logger.error("Scheduled refresh failed: %s", e)
+
+        scheduler.add_job(
+            scheduled_refresh, 'interval',
+            seconds=DATA_REFRESH_INTERVAL,
+            id='data_refresh',
+        )
+        scheduler.start()
+        logger.info("Auto-refresh scheduler started (interval: %ds)", DATA_REFRESH_INTERVAL)
+    except ImportError:
+        logger.info("APScheduler not available — auto-refresh disabled")
+    except Exception as e:
+        logger.warning("Scheduler setup failed: %s", e)
+
+
 # ──────────────────────── Init ────────────────────────
 
 def create_app():
     init_db()
+    setup_scheduler(app)
     return app
 
 

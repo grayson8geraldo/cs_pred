@@ -19,8 +19,9 @@ GLICKO2_DEFAULT_RATING = 1500
 GLICKO2_DEFAULT_RD = 350
 GLICKO2_DEFAULT_VOL = 0.06
 
-# Time-decay Elo: K-factor increases for recent matches
+# Time-decay Elo: K-factor varies by match age
 ELO_K_FACTOR_RECENT = 40   # last 30 days
+ELO_K_FACTOR_MID = 32      # 30-90 days
 ELO_K_FACTOR_OLD = 20      # older than 90 days
 
 # Prediction model
@@ -28,8 +29,22 @@ MODEL_PATH = os.path.join(MODELS_DIR, "ensemble_model.pkl")
 FEATURE_COLUMNS_PATH = os.path.join(MODELS_DIR, "feature_columns.json")
 CALIBRATOR_PATH = os.path.join(MODELS_DIR, "calibrator.pkl")
 
+# Stacking meta-learner
+STACKING_META_PATH = os.path.join(MODELS_DIR, "stacking_meta.pkl")
+
+# Optuna hyperparameter tuning
+OPTUNA_N_TRIALS = 50         # number of Optuna trials per model
+OPTUNA_TIMEOUT = 300         # max seconds for tuning per model
+OPTUNA_BEST_PARAMS_PATH = os.path.join(MODELS_DIR, "optuna_best_params.json")
+
+# BO3/BO5 Monte Carlo simulation
+MONTE_CARLO_SIMULATIONS = 10000
+
 # Data refresh interval (seconds)
 DATA_REFRESH_INTERVAL = 3600  # 1 hour
+
+# Prediction cache TTL (seconds)
+PREDICTION_CACHE_TTL = 300  # 5 minutes
 
 # Maps in CS2 competitive pool
 CS2_MAPS = [

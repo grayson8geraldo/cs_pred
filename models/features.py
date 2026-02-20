@@ -1,6 +1,6 @@
 """
 Advanced feature engineering for CS2 match prediction.
-32 features covering ratings, form, maps, players, context, and momentum.
+38 features covering ratings, form, maps, players, context, and momentum.
 """
 
 import math
@@ -16,7 +16,7 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
                      best_of=1, event_name="", is_playoff=False,
                      as_of=None):
     """
-    Compute 32-feature vector for a match.
+    Compute 38-feature vector for a match.
     All diff features: positive = advantage for team1.
 
     as_of: datetime to use as reference point for time-based features.
@@ -47,7 +47,7 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
     tier = _get_event_tier(event_name)
     f["event_tier"] = tier / 5.0
 
-    # ═══════════════ BLOCK 3: WIN RATES — MULTI-WINDOW (5) ═══════════════
+    # ═══════════════ BLOCK 3: WIN RATES — MULTI-WINDOW (7) ═══════════════
     now_iso = now.isoformat()
     d30 = (now - timedelta(days=30)).isoformat()
     d90 = (now - timedelta(days=90)).isoformat()
@@ -70,11 +70,19 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
     form10_2 = _get_weighted_form(conn, team2_id, n=10, before=now_iso)
     f["recent_form_10_diff"] = form10_1 - form10_2
 
+    # NEW: Opponent-strength-adjusted win rate (SoS)
+    sos1 = _get_sos_adjusted_win_rate(conn, team1_id, since=d90, before=now_iso)
+    sos2 = _get_sos_adjusted_win_rate(conn, team2_id, since=d90, before=now_iso)
+    f["sos_win_rate_diff"] = sos1 - sos2
+
+    # NEW: Tournament momentum — win rate in current event
+    tm1 = _get_tournament_momentum(conn, team1_id, event_name, before=now_iso)
+    tm2 = _get_tournament_momentum(conn, team2_id, event_name, before=now_iso)
+    f["tournament_momentum_diff"] = tm1 - tm2
+
     # ═══════════════ BLOCK 4: HEAD-TO-HEAD (3) ═══════════════
     h2h_wr, h2h_count = _get_h2h_detailed(conn, team1_id, team2_id)
     f["h2h_matches"] = min(h2h_count / 10.0, 1.0)
-    # Only trust H2H signal when we have enough matches to be meaningful.
-    # With < 5 H2H matches, the signal is too noisy to be useful.
     if h2h_count >= 5:
         f["h2h_advantage"] = h2h_wr
         f["h2h_recent"] = _get_h2h_recent(conn, team1_id, team2_id, n=5)
@@ -82,7 +90,7 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
         f["h2h_advantage"] = 0.5
         f["h2h_recent"] = 0.5
 
-    # ═══════════════ BLOCK 5: MAP ANALYSIS (5) ═══════════════
+    # ═══════════════ BLOCK 5: MAP ANALYSIS (9) ═══════════════
     if map_name:
         mwr1 = _get_map_win_rate(conn, team1_id, map_name)
         mwr2 = _get_map_win_rate(conn, team2_id, map_name)
@@ -90,9 +98,27 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
         mp1 = _get_map_matches(conn, team1_id, map_name)
         mp2 = _get_map_matches(conn, team2_id, map_name)
         f["map_experience_diff"] = (mp1 - mp2) / max(mp1 + mp2, 1)
+
+        # NEW: CT/T side win rates on this map
+        ct1, t1_wr = _get_side_win_rates(conn, team1_id, map_name)
+        ct2, t2_wr = _get_side_win_rates(conn, team2_id, map_name)
+        f["ct_wr_diff"] = ct1 - ct2
+        f["t_wr_diff"] = t1_wr - t2_wr
+
+        # NEW: Pistol round win rate on this map
+        pw1 = _get_pistol_win_rate(conn, team1_id, map_name)
+        pw2 = _get_pistol_win_rate(conn, team2_id, map_name)
+        f["pistol_wr_diff"] = pw1 - pw2
+
+        # NEW: Map pick advantage — is this map in team's top maps?
+        f["map_pick_advantage"] = _get_map_pick_advantage(conn, team1_id, team2_id, map_name)
     else:
         f["map_wr_diff"] = 0.0
         f["map_experience_diff"] = 0.0
+        f["ct_wr_diff"] = 0.0
+        f["t_wr_diff"] = 0.0
+        f["pistol_wr_diff"] = 0.0
+        f["map_pick_advantage"] = 0.0
 
     depth1 = _get_map_pool_depth(conn, team1_id)
     depth2 = _get_map_pool_depth(conn, team2_id)
@@ -153,19 +179,54 @@ def compute_features(team1_id, team2_id, map_name=None, is_lan=False,
     return f
 
 
+def compute_map_features(team1_id, team2_id, map_name, is_lan=False,
+                         event_name="", is_playoff=False, as_of=None):
+    """Compute features for a specific map (used in BO3/BO5 Monte Carlo)."""
+    return compute_features(
+        team1_id, team2_id, map_name=map_name, is_lan=is_lan,
+        best_of=1, event_name=event_name, is_playoff=is_playoff,
+        as_of=as_of,
+    )
+
+
+def get_team_map_pool(team_id):
+    """Return maps sorted by win rate (best first) for map veto simulation."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT map_name, wins, matches_played
+        FROM team_map_ratings
+        WHERE team_id = ? AND matches_played >= 2
+        ORDER BY CAST(wins AS REAL) / matches_played DESC
+    """, (team_id,)).fetchall()
+    conn.close()
+    if not rows:
+        return CS2_MAPS[:7]
+    return [r["map_name"] for r in rows]
+
+
 def get_feature_names():
-    """Return ordered list of all 32 feature names."""
+    """Return ordered list of all 38 feature names."""
     return [
+        # Block 1: Rating Systems (4)
         "elo_diff", "glicko2_diff", "glicko2_rd_diff", "elo_win_prob",
+        # Block 2: Rankings & Tier (3)
         "ranking_diff", "log_ranking_ratio", "event_tier",
+        # Block 3: Win Rates (7)
         "win_rate_30d_diff", "win_rate_90d_diff", "form_trend_diff",
         "recent_form_5_diff", "recent_form_10_diff",
+        "sos_win_rate_diff", "tournament_momentum_diff",
+        # Block 4: H2H (3)
         "h2h_advantage", "h2h_matches", "h2h_recent",
-        "map_wr_diff", "map_experience_diff", "map_pool_depth_diff",
-        "avg_rounds_diff", "close_map_resilience_diff",
+        # Block 5: Map Analysis (9)
+        "map_wr_diff", "map_experience_diff",
+        "ct_wr_diff", "t_wr_diff", "pistol_wr_diff", "map_pick_advantage",
+        "map_pool_depth_diff", "avg_rounds_diff", "close_map_resilience_diff",
+        # Block 6: Player Metrics (4)
         "player_rating_diff", "star_player_diff", "awp_advantage",
         "roster_stability_diff",
+        # Block 7: Context (4)
         "is_lan", "is_playoff", "best_of", "rest_diff",
+        # Block 8: Momentum (4)
         "streak_diff", "experience_diff", "vs_top10_diff", "upset_factor_diff",
     ]
 
@@ -255,6 +316,67 @@ def _get_weighted_form(conn, team_id, n=10, before=None):
     return weighted_wins / total_weight
 
 
+def _get_sos_adjusted_win_rate(conn, team_id, since=None, before=None):
+    """Strength-of-schedule adjusted win rate.
+    Wins against higher-ranked opponents count more, losses against lower-ranked count more.
+    """
+    query = """
+        SELECT m.winner_id, m.team1_id, m.team2_id,
+               t1.world_ranking as r1, t2.world_ranking as r2
+        FROM matches m
+        JOIN teams t1 ON m.team1_id = t1.id
+        JOIN teams t2 ON m.team2_id = t2.id
+        WHERE (m.team1_id = ? OR m.team2_id = ?) AND m.winner_id IS NOT NULL
+    """
+    params = [team_id, team_id]
+    if since:
+        query += " AND m.match_date >= ?"
+        params.append(since)
+    if before:
+        query += " AND m.match_date < ?"
+        params.append(before)
+
+    rows = conn.execute(query, params).fetchall()
+    if not rows:
+        return 0.5
+
+    total_weight = 0.0
+    weighted_wins = 0.0
+    for r in rows:
+        opp_rank = r["r2"] if r["team1_id"] == team_id else r["r1"]
+        my_rank = r["r1"] if r["team1_id"] == team_id else r["r2"]
+        opp_rank = opp_rank or 100
+        my_rank = my_rank or 100
+        # Weight: beating a #1 team is worth more than beating a #50 team
+        weight = max(0.5, (100 - min(opp_rank, 100)) / 50.0 + 0.5)
+        total_weight += weight
+        if r["winner_id"] == team_id:
+            weighted_wins += weight
+    return weighted_wins / total_weight if total_weight > 0 else 0.5
+
+
+def _get_tournament_momentum(conn, team_id, event_name, before=None):
+    """Win rate within the current tournament/event."""
+    if not event_name:
+        return 0.5
+    query = """
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN winner_id = ? THEN 1 ELSE 0 END) as wins
+        FROM matches
+        WHERE (team1_id = ? OR team2_id = ?)
+          AND event_name = ? AND winner_id IS NOT NULL
+    """
+    params = [team_id, team_id, team_id, event_name]
+    if before:
+        query += " AND match_date < ?"
+        params.append(before)
+
+    row = conn.execute(query, params).fetchone()
+    if not row or row["total"] == 0:
+        return 0.5
+    return row["wins"] / row["total"]
+
+
 def _get_h2h_detailed(conn, team1_id, team2_id):
     rows = conn.execute("""
         SELECT winner_id FROM matches
@@ -265,9 +387,6 @@ def _get_h2h_detailed(conn, team1_id, team2_id):
     wins = sum(1 for r in rows if r["winner_id"] == team1_id)
     n = len(rows)
     raw_rate = wins / n
-    # Reliability scaling: only trust H2H that deviates from 0.5
-    # when we have enough matches to be statistically meaningful.
-    # 3 matches → reliability 0.2, 10 matches → 0.67, 15+ → 1.0
     reliability = min(n / 15.0, 1.0)
     return 0.5 + (raw_rate - 0.5) * reliability, n
 
@@ -288,7 +407,6 @@ def _get_h2h_recent(conn, team1_id, team2_id, n=5):
         if r["winner_id"] == team1_id:
             weighted_wins += weight
     raw = weighted_wins / total_weight
-    # Reliability scaling consistent with _get_h2h_detailed
     match_count = len(rows)
     reliability = min(match_count / 10.0, 1.0)
     return 0.5 + (raw - 0.5) * reliability
@@ -310,6 +428,52 @@ def _get_map_matches(conn, team_id, map_name):
         (team_id, map_name),
     ).fetchone()
     return row["matches_played"] if row else 0
+
+
+def _get_side_win_rates(conn, team_id, map_name):
+    """Return (ct_win_rate, t_win_rate) for a team on a specific map."""
+    row = conn.execute(
+        "SELECT ct_wr, t_wr FROM team_map_ratings WHERE team_id = ? AND map_name = ?",
+        (team_id, map_name),
+    ).fetchone()
+    if row:
+        return row["ct_wr"] or 0.5, row["t_wr"] or 0.5
+    return 0.5, 0.5
+
+
+def _get_pistol_win_rate(conn, team_id, map_name):
+    """Get pistol round win rate for a team on a specific map."""
+    row = conn.execute(
+        "SELECT pistol_wr FROM team_map_ratings WHERE team_id = ? AND map_name = ?",
+        (team_id, map_name),
+    ).fetchone()
+    if row and row["pistol_wr"] is not None:
+        return row["pistol_wr"]
+    return 0.5
+
+
+def _get_map_pick_advantage(conn, team1_id, team2_id, map_name):
+    """Proxy for map veto advantage.
+    Positive if map_name is in team1's top maps but not team2's, and vice versa.
+    """
+    def _map_rank(team_id, mname):
+        rows = conn.execute("""
+            SELECT map_name, CAST(wins AS REAL) / MAX(matches_played, 1) as wr
+            FROM team_map_ratings
+            WHERE team_id = ? AND matches_played >= 2
+            ORDER BY wr DESC
+        """, (team_id,)).fetchall()
+        for i, r in enumerate(rows):
+            if r["map_name"] == mname:
+                return i + 1
+        return len(CS2_MAPS)
+
+    rank1 = _map_rank(team1_id, map_name)
+    rank2 = _map_rank(team2_id, map_name)
+    # Normalize: if team1's rank is 1 (best map) and team2's rank is 7 (worst),
+    # this is a strong pick advantage for team1
+    max_maps = len(CS2_MAPS)
+    return (rank2 - rank1) / max_maps
 
 
 def _get_map_pool_depth(conn, team_id):

@@ -251,8 +251,65 @@ function displayPrediction(result) {
         `Predicted Winner: ${result.predicted_winner}`;
 
     // Method
+    const methodNames = {
+        "stacking_ensemble": "Stacking Ensemble (XGB + GBT + LGBM + LR)",
+        "ensemble": "Ensemble (XGB + GBT + LR)",
+        "heuristic": "Heuristic (Weighted Ratings)",
+    };
     document.getElementById("result-method").textContent =
-        `Method: ${result.method === "xgboost" ? "XGBoost ML Model" : "Heuristic (Weighted Ratings)"}`;
+        `Method: ${methodNames[result.method] || result.method}`;
+
+    // BO3/BO5 Series Simulation
+    const seriesDiv = document.getElementById("result-series");
+    if (result.series_simulation) {
+        seriesDiv.classList.remove("hidden");
+        const sim = result.series_simulation;
+
+        // Overview
+        document.getElementById("series-overview").innerHTML = `
+            <div class="series-probs">
+                <div class="series-prob-item">
+                    <span class="name">${result.team1.name} wins series</span>
+                    <span class="value ${sim.team1_series_win_prob > 0.5 ? 'positive' : ''}">${(sim.team1_series_win_prob * 100).toFixed(1)}%</span>
+                </div>
+                <div class="series-prob-item">
+                    <span class="name">${result.team2.name} wins series</span>
+                    <span class="value ${sim.team2_series_win_prob > 0.5 ? 'positive' : ''}">${(sim.team2_series_win_prob * 100).toFixed(1)}%</span>
+                </div>
+            </div>
+        `;
+
+        // Score probabilities
+        const scores = sim.score_probabilities;
+        document.getElementById("series-scores").innerHTML = `
+            <div class="series-score-grid">
+                ${Object.entries(scores).map(([score, prob]) => `
+                    <div class="score-item">
+                        <span class="score-label">${score}</span>
+                        <div class="score-bar-wrap">
+                            <div class="score-bar" style="width: ${prob * 100 * 2.5}%"></div>
+                        </div>
+                        <span class="score-prob">${(prob * 100).toFixed(1)}%</span>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+
+        // Map probabilities
+        const maps = sim.map_probabilities;
+        document.getElementById("series-maps").innerHTML = `
+            <div class="series-map-grid">
+                ${Object.entries(maps).map(([mapName, prob]) => `
+                    <div class="feature-item">
+                        <span class="name">${mapName}</span>
+                        <span class="value ${prob > 0.5 ? 'positive' : 'negative'}">${result.team1.name}: ${(prob * 100).toFixed(1)}%</span>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    } else {
+        seriesDiv.classList.add("hidden");
+    }
 
     // Analysis
     const points = document.getElementById("analysis-points");
@@ -264,12 +321,16 @@ function displayPrediction(result) {
         modelsDiv.classList.remove("hidden");
         const mg = document.getElementById("models-grid");
         const mp = result.model_probabilities;
-        mg.innerHTML = `
+        let html = `
             <div class="feature-item"><span class="name">XGBoost</span><span class="value">${(mp.xgboost * 100).toFixed(1)}%</span></div>
             <div class="feature-item"><span class="name">Gradient Boosting</span><span class="value">${(mp.gradient_boosting * 100).toFixed(1)}%</span></div>
             <div class="feature-item"><span class="name">Logistic Regression</span><span class="value">${(mp.logistic_regression * 100).toFixed(1)}%</span></div>
-            <div class="feature-item"><span class="name">Agreement</span><span class="value ${mp.agreement > 0.7 ? 'positive' : mp.agreement < 0.4 ? 'negative' : ''}">${(mp.agreement * 100).toFixed(0)}%</span></div>
         `;
+        if (mp.lightgbm !== undefined) {
+            html += `<div class="feature-item"><span class="name">LightGBM</span><span class="value">${(mp.lightgbm * 100).toFixed(1)}%</span></div>`;
+        }
+        html += `<div class="feature-item"><span class="name">Agreement</span><span class="value ${mp.agreement > 0.7 ? 'positive' : mp.agreement < 0.4 ? 'negative' : ''}">${(mp.agreement * 100).toFixed(0)}%</span></div>`;
+        mg.innerHTML = html;
     } else {
         modelsDiv.classList.add("hidden");
     }

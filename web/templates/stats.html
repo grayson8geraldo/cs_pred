@@ -4,36 +4,48 @@
 {% block content %}
 <div class="page-header">
     <h1>Statistics & Model Info</h1>
+    <button class="btn btn-primary" id="btn-evaluate" onclick="runEvaluation()">Run Evaluation</button>
 </div>
 
 <div class="stats-grid">
     <section class="card">
         <h2 class="card-title">Prediction Strategy</h2>
         <div class="strategy-info">
-            <h3>Features Used</h3>
+            <h3>Features (38 total)</h3>
             <ul class="feature-list">
-                <li><strong>Elo Rating Differential</strong> - Custom Elo rating tracking team strength over time</li>
-                <li><strong>Glicko-2 Rating Differential</strong> - Advanced rating with uncertainty tracking</li>
-                <li><strong>Glicko-2 RD Differential</strong> - Rating deviation (how certain we are about the rating)</li>
-                <li><strong>World Ranking Differential</strong> - HLTV official ranking gap</li>
-                <li><strong>Win Rate (3 months)</strong> - Recent overall win rate differential</li>
-                <li><strong>Recent Form</strong> - Performance in last 10 matches</li>
-                <li><strong>Head-to-Head</strong> - Historical matchup advantage</li>
-                <li><strong>Map Win Rate</strong> - Map-specific performance differential</li>
-                <li><strong>Average Rounds</strong> - Round scoring differential</li>
-                <li><strong>LAN Factor</strong> - LAN vs online context</li>
-                <li><strong>Experience</strong> - Matches played differential</li>
-                <li><strong>Win Streak</strong> - Current streak momentum</li>
+                <li><strong>Elo & Glicko-2 Ratings</strong> - Dual rating systems with time-decay K-factor</li>
+                <li><strong>World Ranking</strong> - HLTV official ranking differential</li>
+                <li><strong>Win Rate (30d / 90d)</strong> - Multi-window win rate tracking</li>
+                <li><strong>SoS-Adjusted Win Rate</strong> - Strength-of-schedule weighted results</li>
+                <li><strong>Tournament Momentum</strong> - Performance within current event</li>
+                <li><strong>Recent Form (5/10)</strong> - Weighted recent match results</li>
+                <li><strong>Head-to-Head</strong> - Historical matchup with reliability scaling</li>
+                <li><strong>Map Win Rate + CT/T Sides</strong> - Map-specific side performance</li>
+                <li><strong>Pistol Win Rate</strong> - Pistol round conversion rate</li>
+                <li><strong>Map Pick Advantage</strong> - Map veto proxy (is this their pick?)</li>
+                <li><strong>Player Metrics</strong> - Avg rating, star player, AWP presence, roster stability</li>
+                <li><strong>Context</strong> - LAN/online, playoff, BO format, rest days</li>
             </ul>
 
-            <h3>Model</h3>
-            <p>XGBoost Gradient Boosted Trees with hyperparameter tuning.
-               Fallback: weighted heuristic using sigmoid-transformed feature combination.</p>
+            <h3>Model Architecture</h3>
+            <p><strong>Stacking Ensemble</strong> with 4 base models:</p>
+            <ul class="feature-list">
+                <li><strong>XGBoost</strong> - Gradient boosted trees with regularization</li>
+                <li><strong>GradientBoosting</strong> - sklearn gradient boosting</li>
+                <li><strong>LightGBM</strong> - Microsoft's fast gradient boosting</li>
+                <li><strong>Logistic Regression</strong> - Linear baseline on scaled features</li>
+            </ul>
+            <p style="margin-top: 8px;">Meta-learner: Logistic Regression on OOF predictions.
+               Calibration: Isotonic regression for probability calibration.</p>
+
+            <h3>BO3/BO5 Simulation</h3>
+            <p>Monte Carlo simulation (10,000 runs) with per-map probability estimation and map veto modeling.</p>
 
             <h3>Data Sources</h3>
-            <ul>
-                <li>HLTV.org (match results, rankings, team stats)</li>
-                <li>Custom Elo & Glicko-2 rating systems computed from match history</li>
+            <ul class="feature-list">
+                <li>HLTV.org (rankings, match results, player stats)</li>
+                <li>PandaScore API (historical matches, team metadata)</li>
+                <li>Custom Elo & Glicko-2 rating systems with time-decay</li>
             </ul>
         </div>
     </section>
@@ -66,6 +78,16 @@
                 <span class="value" id="ms-accuracy">-</span>
             </div>
         </div>
+
+        <!-- Evaluation Results -->
+        <div id="eval-results" style="display:none; margin-top: 24px;">
+            <h3 style="color: var(--accent); margin-bottom: 12px;">Evaluation Results</h3>
+            <div id="eval-overall"></div>
+            <h4 style="margin-top: 16px; font-size: 14px; color: var(--text-secondary);">TIER BREAKDOWN</h4>
+            <div id="eval-tiers"></div>
+            <h4 style="margin-top: 16px; font-size: 14px; color: var(--text-secondary);">RELIABILITY DIAGRAM</h4>
+            <div id="eval-reliability"></div>
+        </div>
     </section>
 </div>
 {% endblock %}
@@ -87,6 +109,65 @@ async function loadStats() {
     } catch (e) {
         console.error("Failed to load stats", e);
     }
+}
+
+async function runEvaluation() {
+    const btn = document.getElementById("btn-evaluate");
+    btn.disabled = true;
+    btn.textContent = "Evaluating...";
+
+    try {
+        const data = await apiPost("/api/evaluate");
+        const resultsDiv = document.getElementById("eval-results");
+        resultsDiv.style.display = "block";
+
+        // Overall
+        if (data.overall) {
+            document.getElementById("eval-overall").innerHTML = `
+                <div class="model-stat-row"><span class="label">Accuracy:</span><span class="value">${(data.overall.accuracy * 100).toFixed(1)}%</span></div>
+                <div class="model-stat-row"><span class="label">Brier Score:</span><span class="value">${data.overall.brier.toFixed(4)}</span></div>
+                <div class="model-stat-row"><span class="label">Log Loss:</span><span class="value">${data.overall.log_loss.toFixed(4)}</span></div>
+                <div class="model-stat-row"><span class="label">Samples:</span><span class="value">${data.overall.n_samples}</span></div>
+            `;
+        }
+
+        // Tier breakdown
+        if (data.tier_breakdown) {
+            const tiers = data.tier_breakdown;
+            let html = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">';
+            for (const [tier, info] of Object.entries(tiers)) {
+                const label = tier.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                html += `<div class="feature-item"><span class="name">${label}</span><span class="value">${(info.accuracy * 100).toFixed(1)}% (n=${info.count})</span></div>`;
+            }
+            html += '</div>';
+            document.getElementById("eval-tiers").innerHTML = html;
+        }
+
+        // Reliability diagram (text-based)
+        if (data.reliability_diagram) {
+            let html = '<div style="display: grid; gap: 4px; margin-top: 8px;">';
+            data.reliability_diagram.forEach(bin => {
+                const gap = Math.abs(bin.mean_predicted - bin.mean_actual);
+                const color = gap < 0.05 ? "var(--green)" : gap < 0.10 ? "var(--accent)" : "var(--red)";
+                html += `<div style="display: flex; align-items: center; gap: 12px; padding: 4px 8px; font-size: 13px;">
+                    <span style="min-width: 50px; font-weight: 600;">${(bin.bin_center * 100).toFixed(0)}%</span>
+                    <div style="flex: 1; height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+                        <div style="width: ${bin.mean_actual * 100}%; height: 100%; background: ${color}; border-radius: 4px;"></div>
+                    </div>
+                    <span style="min-width: 80px; text-align: right; color: var(--text-secondary);">actual: ${(bin.mean_actual * 100).toFixed(1)}% (n=${bin.count})</span>
+                </div>`;
+            });
+            html += '</div>';
+            document.getElementById("eval-reliability").innerHTML = html;
+        }
+
+        showToast("Evaluation complete!", "success");
+    } catch (e) {
+        showToast("Evaluation failed: " + e.message, "error");
+    }
+
+    btn.disabled = false;
+    btn.textContent = "Run Evaluation";
 }
 </script>
 {% endblock %}

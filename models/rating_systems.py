@@ -1,9 +1,11 @@
-"""Elo and Glicko-2 rating systems for CS2 teams."""
+"""Elo and Glicko-2 rating systems for CS2 teams with time-decay."""
 
 import math
+from datetime import datetime, timedelta
 from data.database import get_connection
 from config.settings import (
-    ELO_K_FACTOR, ELO_DEFAULT_RATING,
+    ELO_K_FACTOR, ELO_K_FACTOR_RECENT, ELO_K_FACTOR_MID, ELO_K_FACTOR_OLD,
+    ELO_DEFAULT_RATING,
     GLICKO2_DEFAULT_RATING, GLICKO2_DEFAULT_RD, GLICKO2_DEFAULT_VOL,
 )
 
@@ -20,8 +22,29 @@ def elo_update(rating, expected, actual, k=ELO_K_FACTOR):
     return rating + k * (actual - expected)
 
 
-def update_elo_after_match(team1_id, team2_id, winner_id):
-    """Update Elo ratings after a match result."""
+def _get_time_decay_k(match_date=None):
+    """Get K-factor based on match recency.
+    More recent matches have higher K → bigger rating swings.
+    """
+    if match_date is None:
+        return ELO_K_FACTOR_RECENT
+    now = datetime.utcnow()
+    if isinstance(match_date, str):
+        try:
+            match_date = datetime.fromisoformat(match_date)
+        except (ValueError, TypeError):
+            return ELO_K_FACTOR
+    age_days = (now - match_date).days
+    if age_days <= 30:
+        return ELO_K_FACTOR_RECENT
+    elif age_days <= 90:
+        return ELO_K_FACTOR_MID
+    else:
+        return ELO_K_FACTOR_OLD
+
+
+def update_elo_after_match(team1_id, team2_id, winner_id, match_date=None):
+    """Update Elo ratings after a match result with time-decay K-factor."""
     conn = get_connection()
 
     r1 = _get_rating(conn, team1_id, "elo", ELO_DEFAULT_RATING)
@@ -33,8 +56,9 @@ def update_elo_after_match(team1_id, team2_id, winner_id):
     s1 = 1.0 if winner_id == team1_id else 0.0
     s2 = 1.0 - s1
 
-    new_r1 = elo_update(r1, e1, s1)
-    new_r2 = elo_update(r2, e2, s2)
+    k = _get_time_decay_k(match_date)
+    new_r1 = elo_update(r1, e1, s1, k=k)
+    new_r2 = elo_update(r2, e2, s2, k=k)
 
     _set_rating(conn, team1_id, "elo", new_r1)
     _set_rating(conn, team2_id, "elo", new_r2)
@@ -184,7 +208,7 @@ def _set_glicko2(conn, team_id, rating, rd, vol):
 
 
 def recalculate_all_ratings():
-    """Recalculate all ratings from match history (chronological order)."""
+    """Recalculate all ratings from match history (chronological order) with time-decay."""
     conn = get_connection()
 
     # Reset all ratings
@@ -192,13 +216,22 @@ def recalculate_all_ratings():
     conn.commit()
 
     matches = conn.execute(
-        "SELECT id, team1_id, team2_id, winner_id FROM matches ORDER BY match_date ASC"
+        "SELECT id, team1_id, team2_id, winner_id, match_date FROM matches ORDER BY match_date ASC"
     ).fetchall()
     conn.close()
 
     for match in matches:
         if match["winner_id"]:
-            update_elo_after_match(match["team1_id"], match["team2_id"], match["winner_id"])
+            match_date = None
+            if match["match_date"]:
+                try:
+                    match_date = datetime.fromisoformat(str(match["match_date"]))
+                except (ValueError, TypeError):
+                    pass
+            update_elo_after_match(
+                match["team1_id"], match["team2_id"], match["winner_id"],
+                match_date=match_date,
+            )
             update_glicko2_after_match(match["team1_id"], match["team2_id"], match["winner_id"])
 
     return len(matches)
